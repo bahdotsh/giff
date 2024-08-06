@@ -1,18 +1,20 @@
 use clap::Parser;
-use comfy_table::{presets::UTF8_FULL, Cell, Table};
+use comfy_table::{presets::UTF8_FULL, Table};
+use comfy_table::{Cell, Color};
 use crossterm::style::Stylize;
 use crossterm::{
     execute,
     terminal::{self, ClearType},
 };
 use regex::Regex;
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::process::Command;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "master")]
+    #[arg(short, long, default_value = "main")]
     branch: String,
 }
 
@@ -37,68 +39,122 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create and configure the table
     let mut table = Table::new();
+    table.set_content_arrangement(comfy_table::ContentArrangement::DynamicFullWidth);
     table.load_preset(UTF8_FULL);
-    table.set_header(vec![args.branch.as_str(), "HEAD"]);
+    table.set_header(vec!["File", args.branch.as_str(), "HEAD"]);
 
-    // Parse and add diff output to the table
+    // Regex to detect diff file headers
+    let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap();
+    let mut file_changes: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
+    let mut current_file = String::new();
+
+    // Parse and accumulate diff output
+    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
     let mut base_lines = Vec::new();
     let mut head_lines = Vec::new();
 
     for line in diff_output.lines() {
-        let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
-        let trimmed_line = line.trim(); // Trim leading and trailing spaces
+        let trimmed_line = line.trim();
         let trimmed_line = ansi_escape_regex.replace_all(trimmed_line, "");
 
-        if trimmed_line.starts_with("diff --git") || trimmed_line.starts_with("index") {
-            continue; // Skip lines that are not actual changes
+        if let Some(caps) = diff_file_regex.captures(trimmed_line.as_ref()) {
+            if !current_file.is_empty() {
+                file_changes.insert(
+                    current_file.clone(),
+                    (base_lines.clone(), head_lines.clone()),
+                );
+                base_lines.clear();
+                head_lines.clear();
+            }
+            current_file = caps.get(1).unwrap().as_str().to_string();
+            continue;
+        }
+
+        if trimmed_line.starts_with("index") {
+            continue;
         }
 
         if trimmed_line.starts_with("---") || trimmed_line.starts_with("+++") {
-            continue; // Skip file change headers
+            continue;
         }
 
         if trimmed_line.starts_with("@@") {
-            // This line indicates a new chunk of changes; skip it
             continue;
         }
 
         if trimmed_line.starts_with("new") {
-            // This line indicates a new chunk of changes; skip it
             continue;
         }
 
         if trimmed_line.starts_with('-') {
-            // This line is from the base branch (deleted line)
-            base_lines.push(trimmed_line.red().to_string());
+            base_lines.push(trimmed_line.to_string());
         } else if trimmed_line.starts_with('+') {
-            // This line is from the HEAD branch (added line)
-            head_lines.push(trimmed_line.green().to_string());
+            head_lines.push(trimmed_line.to_string());
         } else {
-            // This line is unchanged
             base_lines.push(trimmed_line.to_string());
             head_lines.push(trimmed_line.to_string());
         }
     }
 
-    // Ensure both columns have the same number of rows
-    let max_lines = base_lines.len().max(head_lines.len());
-
-    let empty_string = "".to_string();
+    // Insert last file changes
+    if !current_file.is_empty() {
+        file_changes.insert(current_file.clone(), (base_lines, head_lines));
+    }
 
     // Add rows to the table
-    for i in 0..max_lines {
-        let base_line = base_lines.get(1).unwrap_or(&empty_string);
-        let head_line = head_lines.get(1).unwrap_or(&empty_string);
+    for (file, (base_lines, head_lines)) in file_changes {
+        let max_lines = base_lines.len().max(head_lines.len());
+        let empty_string = "".to_string();
 
-        println!("{}\n", base_line.trim_end().trim_start());
-        println!("{}\n", head_line.trim_end().trim_start());
+        // Add the file name row
+        table.add_row(vec![file.clone(), "".to_string(), "".to_string()]);
 
-        table.add_row(vec![base_line, head_line]);
+        let base_cells: Vec<Cell> = base_lines
+            .iter()
+            .map(|line| {
+                let mut cell = Cell::new(line);
+                if line.starts_with('-') {
+                    cell = cell.fg(Color::Red);
+                } else if line.starts_with('+') {
+                    cell = cell.fg(Color::Green);
+                }
+                cell
+            })
+            .collect();
+
+        let head_cells: Vec<Cell> = head_lines
+            .iter()
+            .map(|line| {
+                let mut cell = Cell::new(line);
+                if line.starts_with('-') {
+                    cell = cell.fg(Color::Red);
+                } else if line.starts_with('+') {
+                    cell = cell.fg(Color::Green);
+                }
+                cell
+            })
+            .collect();
+
+        // Add a single row with the combined lines
+        let max_len = max_lines;
+        let mut base_cells_padded = base_cells.clone();
+        let mut head_cells_padded = head_cells.clone();
+
+        base_cells_padded.resize(max_len, Cell::new(""));
+        head_cells_padded.resize(max_len, Cell::new(""));
+
+        // Add rows to the table
+        for i in 0..max_len {
+            table.add_row(vec![
+                Cell::new(""), // Placeholder for the first column
+                base_cells_padded[i].clone(),
+                head_cells_padded[i].clone(),
+            ]);
+        }
     }
 
     // Print the table
-    println!("{}", table);
+    println!("{}", table.trim_fmt());
 
-    terminal::disable_raw_mode()?;
     Ok(())
 }
