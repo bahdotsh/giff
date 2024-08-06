@@ -5,13 +5,14 @@ use crossterm::{
     execute,
     terminal::{self, ClearType},
 };
+use regex::Regex;
 use std::io::{self, Write};
 use std::process::Command;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "main")]
+    #[arg(short, long, default_value = "master")]
     branch: String,
 }
 
@@ -33,7 +34,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Clear the terminal
     let mut stdout = io::stdout();
     execute!(stdout, terminal::Clear(ClearType::All))?;
-    terminal::enable_raw_mode()?;
 
     // Create and configure the table
     let mut table = Table::new();
@@ -45,7 +45,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut head_lines = Vec::new();
 
     for line in diff_output.lines() {
+        let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
         let trimmed_line = line.trim(); // Trim leading and trailing spaces
+        let trimmed_line = ansi_escape_regex.replace_all(trimmed_line, "");
 
         if trimmed_line.starts_with("diff --git") || trimmed_line.starts_with("index") {
             continue; // Skip lines that are not actual changes
@@ -56,6 +58,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if trimmed_line.starts_with("@@") {
+            // This line indicates a new chunk of changes; skip it
+            continue;
+        }
+
+        if trimmed_line.starts_with("new") {
             // This line indicates a new chunk of changes; skip it
             continue;
         }
@@ -77,10 +84,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let max_lines = base_lines.len().max(head_lines.len());
 
     let empty_string = "".to_string();
+
     // Add rows to the table
     for i in 0..max_lines {
-        let base_line = base_lines.get(i).unwrap_or(&empty_string);
-        let head_line = head_lines.get(i).unwrap_or(&empty_string);
+        let base_line = base_lines.get(1).unwrap_or(&empty_string);
+        let head_line = head_lines.get(1).unwrap_or(&empty_string);
+
+        println!("{}\n", base_line.trim_end().trim_start());
+        println!("{}\n", head_line.trim_end().trim_start());
+
         table.add_row(vec![base_line, head_line]);
     }
 
