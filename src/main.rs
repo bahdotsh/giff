@@ -11,7 +11,7 @@ use std::io::{self};
 use std::process::Command;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author="bahdotsh", version, about, long_about = None)]
 struct Args {
     #[arg(short, long, default_value = "main")]
     branch: String,
@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Execute git diff command
     let output = Command::new("git")
-        .args(&["diff", &format!("{}..HEAD", args.branch)])
+        .args(["diff", &format!("{}..HEAD", args.branch)])
         .output()?;
 
     if !output.status.success() {
