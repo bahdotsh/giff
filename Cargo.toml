@@ -7,7 +7,7 @@ documentation = "https://github.com/bahdotsh/gitd"
 homepage = "https://github.com/bahdotsh/gitd"
 repository = "https://github.com/bahdotsh/gitd"
 keywords = ["git", "cmd", "diff"]
-categories = ["command-line-utilities", "text-processing", "git"]
+categories = ["command-line-utilities", "text-processing"]
 license = "Unlicense OR MIT"
 exclude = ["HomebrewFormula"]
 
