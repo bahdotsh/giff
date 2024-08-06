@@ -1,11 +1,11 @@
 [package]
-name = "rdiff"
+name = "gitd"
 version = "0.1.0"
 edition = "2021"
 description = "Visualizes the differences between the current HEAD and a specified branch in a git repository using a formatted table output in your terminal. The differences are displayed with color-coded additions and deletions for better readability."
-documentation = "https://github.com/bahdotsh/rdiff"
-homepage = "https://github.com/bahdotsh/rdiff"
-repository = "https://github.com/bahdotsh/rdiff"
+documentation = "https://github.com/bahdotsh/gitd"
+homepage = "https://github.com/bahdotsh/gitd"
+repository = "https://github.com/bahdotsh/gitd"
 keywords = ["git", "cmd", "diff"]
 categories = ["command-line-utilities", "text-processing", "git"]
 license = "Unlicense OR MIT"

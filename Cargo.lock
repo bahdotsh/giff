@@ -249,6 +249,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gitd"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "comfy-table",
+ "crossterm 0.28.1",
+ "ratatui",
+ "regex",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -453,17 +464,6 @@ dependencies = [
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width",
-]
-
-[[package]]
-name = "rdiff"
-version = "0.1.0"
-dependencies = [
- "clap",
- "comfy-table",
- "crossterm 0.28.1",
- "ratatui",
- "regex",
 ]
 
 [[package]]

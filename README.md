@@ -1,4 +1,4 @@
-# rdiff
+# gitd
 
 This Rust program visualizes the differences between the current HEAD and a specified branch in a git repository using a formatted table output in your terminal. The differences are displayed with color-coded additions and deletions for better readability.
 
@@ -25,19 +25,19 @@ This project uses the following Rust crates:
 
 ## Installation
 ```
-cargo install rdiff
+cargo install gitd
 ```
 
 ## From source
 ```
-git clone https://github.com/bahdotsh/rdiff.git
-cd rdiff
+git clone https://github.com/bahdotsh/gitd.git
+cd gitd
 cargo install --path .
 ```
 
 ## Usage
 ```
-rdiff -b branch //by default, the branch will be main
+gitd -b branch //by default, the branch will be main
 ```
 
 # Example Output
