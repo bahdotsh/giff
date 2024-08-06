@@ -1,5 +1,5 @@
 mod args;
-mod gitd;
+mod giff;
 mod parser;
 mod table;
 
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Execute git diff command
-    let diff_output = gitd::get_diff_output(&args.branch)?;
+    let diff_output = giff::get_diff_output(&args.branch)?;
 
     // Clear the terminal
     let mut stdout = io::stdout();
