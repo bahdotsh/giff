@@ -1,14 +1,13 @@
 use clap::Parser;
-use comfy_table::{presets::UTF8_FULL, Table};
+use comfy_table::{presets::UTF8_FULL_CONDENSED, Table};
 use comfy_table::{Cell, Color};
-use crossterm::style::Stylize;
 use crossterm::{
     execute,
     terminal::{self, ClearType},
 };
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self};
 use std::process::Command;
 
 #[derive(Parser)]
@@ -40,8 +39,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create and configure the table
     let mut table = Table::new();
     table.set_content_arrangement(comfy_table::ContentArrangement::DynamicFullWidth);
-    table.load_preset(UTF8_FULL);
-    table.set_header(vec!["File", args.branch.as_str(), "HEAD"]);
+    table.load_preset(UTF8_FULL_CONDENSED);
+    table.set_header(vec![
+        Cell::new("File").set_alignment(comfy_table::CellAlignment::Center),
+        Cell::new(args.branch.as_str()).set_alignment(comfy_table::CellAlignment::Center),
+        Cell::new("HEAD").set_alignment(comfy_table::CellAlignment::Center),
+    ]);
 
     // Regex to detect diff file headers and hunk headers
     let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap();
@@ -113,7 +116,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add rows to the table
     for (file, (base_lines, head_lines)) in file_changes {
         let max_lines = base_lines.len().max(head_lines.len());
-        let empty_string = "".to_string();
 
         // Add the file name row
         table.add_row(vec![file.clone(), "".to_string(), "".to_string()]);
