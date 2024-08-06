@@ -1,6 +1,6 @@
 # giff
 
-This Rust program visualizes the differences between the current HEAD and a specified branch in a git repository using a formatted table output in your terminal. The differences are displayed with color-coded additions and deletions for better readability.
+`giff` visualizes the differences between the current `HEAD` and a specified branch in a git repository using a formatted table output in your terminal. The differences are displayed with color-coded additions and deletions for better readability.
 
 ## Features
 
