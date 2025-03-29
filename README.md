@@ -8,9 +8,13 @@ Giff is a terminal-based Git diff viewer with interactive rebase capabilities th
 - **Interactive Navigation**: Easily navigate through files and changes with keyboard shortcuts
 - **Rebase Detection**: Automatically detects when a rebase is needed
 - **Interactive Rebasing**: Accept or reject changes during rebase right from the interface
-- **Auto-Rebase Option**: Command-line flag to automatically rebase when needed
 
 ## Installation
+The recommended way to install `giff` is using Rust's package manager, Cargo. Here are several methods:
+
+Using Cargo Install (Recommended)
+
+`cargo install zp`
 
 Clone the repository and build the project:
 
@@ -30,10 +34,6 @@ giff
 
 # View diff between a specific branch and HEAD
 giff --branch feature-branch
-
-# Automatically rebase if needed
-giff --auto-rebase
-```
 
 ## Keyboard Shortcuts
 
