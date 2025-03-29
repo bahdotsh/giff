@@ -1,6 +1,6 @@
 [package]
 name = "giff"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Visualizes the differences between the current HEAD and a specified branch in a git repository using a formatted table output in your terminal. The differences are displayed with color-coded additions and deletions for better readability."
 documentation = "https://github.com/bahdotsh/giff"
