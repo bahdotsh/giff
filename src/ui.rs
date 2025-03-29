@@ -4,6 +4,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::widgets::Clear;
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -12,6 +13,7 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::collections::HashMap;
+use std::process::Command;
 use std::{error::Error, io};
 
 enum AppMode {
@@ -47,6 +49,8 @@ struct App<'a> {
     app_mode: AppMode,
     rebase_changes: HashMap<String, Vec<Change>>,
     current_change_idx: usize,
+    rebase_notification: Option<String>,
+    show_rebase_modal: bool,
 }
 
 enum Pane {
@@ -80,6 +84,9 @@ pub fn run_app(file_changes: FileChanges, branch: &str) -> Result<(), Box<dyn Er
         scroll_positions.insert(name.clone(), 0);
     }
 
+    // Check if rebase is needed
+    let rebase_notification = diff::check_rebase_needed()?;
+
     let app = App {
         file_changes: &file_changes,
         branch,
@@ -91,6 +98,8 @@ pub fn run_app(file_changes: FileChanges, branch: &str) -> Result<(), Box<dyn Er
         app_mode: AppMode::Diff,
         rebase_changes: HashMap::new(),
         current_change_idx: 0,
+        rebase_notification: rebase_notification.clone(),
+        show_rebase_modal: rebase_notification.is_some(),
     };
 
     // Run the main loop
@@ -230,6 +239,55 @@ fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()
 
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
+                // Handle rebase modal if shown
+                if app.show_rebase_modal {
+                    match key.code {
+                        KeyCode::Char('r') => {
+                            // Get upstream branch
+                            if let Ok(output) = Command::new("git")
+                                .args(["rev-parse", "--abbrev-ref", "HEAD@{u}"])
+                                .output()
+                            {
+                                if output.status.success() {
+                                    let upstream =
+                                        String::from_utf8_lossy(&output.stdout).trim().to_string();
+                                    // Perform rebase
+                                    match diff::perform_rebase(&upstream) {
+                                        Ok(success) => {
+                                            if success {
+                                                // Rebase successful
+                                                app.show_rebase_modal = false;
+                                                app.rebase_notification = Some(
+                                                    "Rebase completed successfully!".to_string(),
+                                                );
+                                                // We'd update file_changes here, but it's immutable in your structure
+                                                // We'll need to switch back to diff mode
+                                            } else {
+                                                app.rebase_notification = Some(
+                                                         "Rebase failed. There might be conflicts to resolve.".to_string()
+                                                     );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            app.rebase_notification =
+                                                Some(format!("Error during rebase: {}", e));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Char('i') => {
+                            // Ignore rebase suggestion
+                            app.show_rebase_modal = false;
+                        }
+                        KeyCode::Esc => {
+                            // Dismiss modal
+                            app.show_rebase_modal = false;
+                        }
+                        _ => {}
+                    }
+                    continue; // Skip other key processing when modal is shown
+                }
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         match app.app_mode {
@@ -573,6 +631,11 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Render help footer
     render_help(f, app, main_chunks[2]);
+
+    // Render rebase notification if needed
+    if app.show_rebase_modal {
+        render_rebase_notification(f, app, size);
+    }
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
@@ -1048,6 +1111,78 @@ fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
             f.render_widget(no_changes_text, inner_area);
         }
     }
+}
+
+fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
+    if let Some(notification) = &app.rebase_notification {
+        // Calculate modal size
+        let mut max_line_length = 0;
+        let mut line_count = 0;
+        for line in notification.lines() {
+            max_line_length = max_line_length.max(line.len());
+            line_count += 1;
+        }
+        let modal_width = (max_line_length as u16 + 4).min(80);
+        let modal_height = (line_count as u16 + 6).min(20);
+
+        let modal_area = centered_rect(modal_width, modal_height, area);
+
+        // Render background
+        let background = Block::default()
+            .style(Style::default().bg(Color::Black))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow))
+            .title("Rebase Recommended");
+
+        f.render_widget(Clear, modal_area); // Clear the area
+        f.render_widget(&background, modal_area);
+
+        let inner_area = background.inner(modal_area);
+
+        // Split into message area and buttons
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(line_count as u16 + 2),
+                Constraint::Length(3),
+            ])
+            .split(inner_area);
+
+        // Render notification message
+        let message = Paragraph::new(notification.clone())
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+
+        f.render_widget(message, chunks[0]);
+
+        // Render buttons
+        let buttons = Paragraph::new("Press 'r' to rebase now   Press 'i' to ignore")
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center);
+
+        f.render_widget(buttons, chunks[1]);
+    }
+}
+
+fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - height * 100 / r.height) / 2),
+            Constraint::Length(height),
+            Constraint::Percentage((100 - height * 100 / r.height) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - width * 100 / r.width) / 2),
+            Constraint::Length(width),
+            Constraint::Percentage((100 - width * 100 / r.width) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
 
 fn render_help(f: &mut Frame, app: &App, area: Rect) {

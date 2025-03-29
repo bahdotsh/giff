@@ -1,14 +1,21 @@
-# giff
+# giff - Git Diff Viewer and Interactive Rebaser
 
-An interactive git diff viewer with a terminal UI, designed to help you understand changes between branches more easily.
+`giff` is a terminal-based Git diff viewer that allows you to easily visualize changes between branches and selectively apply specific modifications from one branch to another.
 
 ## Features
 
-- **Interactive TUI Interface**: Navigate through changed files and their content with ease
-- **Side-by-side Diff View**: Compare branch and HEAD changes in parallel panes
-- **Color-coded Changes**: Quickly identify additions, deletions, and unchanged lines
-- **Keyboard Navigation**: Intuitive shortcuts for exploring diffs efficiently
-- **Independent Scrolling**: Scroll through base and HEAD content separately
+### Powerful Diff Viewing
+- Side-by-side comparison of changes between branches
+- Unified diff view option for compact rendering
+- Color-coded additions and deletions
+- Keyboard navigation through files and changes
+
+### Interactive Rebase Mode
+- Selectively apply changes from one branch to another
+- Review each modification individually with context
+- Accept or reject changes with simple keystrokes
+- See clear comparison between current and incoming changes
+- Apply only the changes you want
 
 ## Installation
 
@@ -16,59 +23,68 @@ An interactive git diff viewer with a terminal UI, designed to help you understa
 cargo install giff
 ```
 
-Or build from source:
-
-```bash
-git clone https://github.com/bahdotsh/giff.git
-cd giff
-cargo build --release
-```
-
 ## Usage
 
 ```bash
-# Compare current branch with main (default)
+# Compare current branch with main
 giff
 
-# Compare with a specific branch
-giff -b develop
-
-# View help
-giff --help
+# Compare specific branch with HEAD
+giff -b feature-branch
 ```
 
-## Navigation
+## Keyboard Controls
 
-| Key | Action |
-|-----|--------|
-| `j` / Down Arrow | Move down in current pane |
-| `k` / Up Arrow | Move up in current pane |
-| `Tab` | Cycle focus between file list, base content, and HEAD content |
-| `h` / Left Arrow | Focus the file list |
-| `l` / Right Arrow | Focus content panes |
-| `q` | Quit the application |
+### Diff Viewing Mode
+- `j`/`k` or Up/Down: Navigate through files and content
+- `Tab` or `h`/`l`: Switch focus between file list and diff content
+- `u`: Toggle between side-by-side and unified diff views
+- `r`: Enter rebase mode
+- `q` or `Esc`: Quit
 
-## Screenshots
+### Rebase Mode
+- `j`/`k`: Navigate between changes
+- `n`/`p`: Navigate between files with changes
+- `a`: Accept the change (incoming modification)
+- `x`: Reject the change (keep current version)
+- `c`: Commit all accepted changes to disk
+- `q` or `Esc`: Exit rebase mode without applying changes
 
-![giff interface](screenshot.png)
+## The Rebase Workflow
 
-## How It Works
+The interactive rebase mode allows you to selectively apply changes from your target branch to your current branch:
 
-giff uses `git diff` to generate a comparison between your current HEAD and a specified branch. It then parses this output and presents it in an interactive terminal UI powered by Ratatui, allowing you to:
+1. Start `giff` and view the differences between branches
+2. Press `r` to enter rebase mode
+3. For each change:
+   - Review the current code and the incoming modification
+   - For removed lines, you'll see both the current line and its replacement
+   - Press `a` to accept the incoming change
+   - Press `x` to reject it and keep your current code
+4. Navigate between changes with `j`/`k` and between files with `n`/`p`
+5. When finished reviewing, press `c` to commit all accepted changes
+6. The changes will be applied to your working copy
 
-1. Browse the list of changed files
-2. View the base branch content on the left
-3. View the HEAD content on the right
-4. Navigate through changes with intuitive keyboard controls
+This enables you to cherry-pick specific changes from another branch without having to manage the complexity of Git's cherry-pick or rebase commands directly.
 
-The application highlights additions in green and deletions in red, making it easy to identify what changed between branches.
+## Example
 
-## Dependencies
+Let's say you've made several changes in a feature branch, but main has also progressed with some changes you want to incorporate:
 
-- [clap](https://crates.io/crates/clap) - Command line argument parsing
-- [regex](https://crates.io/crates/regex) - For parsing diff output
-- [ratatui](https://crates.io/crates/ratatui) - Terminal UI framework
-- [crossterm](https://crates.io/crates/crossterm) - Terminal manipulation
+```
+$ giff -b main
+```
+
+This shows you all differences between your current branch and main. After reviewing the diffs:
+
+1. Press `r` to enter rebase mode
+2. Use `j`/`k` to navigate through the individual changes
+3. For each change:
+   - See both the original code and the new version
+   - Accept changes that you want (`a`) and reject others (`x`)
+4. Press `c` to apply all accepted changes to your working files
+
+This creates a selective merge of only the changes you want, without needing to resolve conflicts manually.
 
 ## Contributing
 
