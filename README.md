@@ -71,21 +71,6 @@ giff --branch feature-branch
 | `i` | Ignore rebase suggestion |
 | `Esc` | Dismiss notification |
 
-## Rebase Functionality
-
-Giff detects situations when a rebase may be needed, such as:
-
-1. When your local branch is behind its upstream
-2. When your branch has diverged from its upstream
-
-When a rebase is recommended, Giff will:
-
-1. Display a notification with details about why a rebase is needed
-2. Offer options to perform the rebase from within the app or ignore the suggestion
-3. If you choose to rebase, Giff will handle the process and update the display
-
-You can also use the `--auto-rebase` flag to automatically perform a rebase if needed without prompting.
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
