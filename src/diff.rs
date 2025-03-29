@@ -93,3 +93,40 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
 
     file_changes
 }
+
+pub fn apply_changes(
+    file_path: &str,
+    changes: &[(usize, String, bool)],
+) -> Result<(), Box<dyn Error>> {
+    let original_content = std::fs::read_to_string(file_path)?;
+    // Use owned strings instead of references
+    let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
+
+    // Sort changes by line number in descending order to avoid messing up line numbers
+    let mut sorted_changes = changes.to_vec();
+    sorted_changes.sort_by(|a, b| b.0.cmp(&a.0));
+
+    // Apply changes
+    for (line_num, content, is_accepted) in sorted_changes {
+        if is_accepted {
+            // Convert from 1-indexed (display) to 0-indexed (internal)
+            let idx = line_num - 1;
+            if idx < lines.len() {
+                // Remove the +/- prefix if present
+                let clean_content = if content.starts_with('+') || content.starts_with('-') {
+                    content[1..].to_string()
+                } else {
+                    content.clone()
+                };
+
+                // Now we can assign to our owned String
+                lines[idx] = clean_content.trim_start().to_string();
+            }
+        }
+    }
+
+    // Write back to file
+    std::fs::write(file_path, lines.join("\n"))?;
+
+    Ok(())
+}
