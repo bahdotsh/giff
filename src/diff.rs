@@ -6,21 +6,94 @@ use std::process::Command;
 pub type LineChange = (usize, String);
 pub type FileChanges = HashMap<String, (Vec<LineChange>, Vec<LineChange>)>;
 
-pub fn get_changes(branch: &str) -> Result<FileChanges, Box<dyn Error>> {
-    let diff_output = get_diff_output(branch)?;
-    Ok(parse_diff_output(&diff_output))
+// Get changes with completely custom diff args
+pub fn get_changes_with_args(args: &str) -> Result<(FileChanges, String, String), Box<dyn Error>> {
+    let args_vec: Vec<&str> = args.split_whitespace().collect();
+    let diff_output = get_diff_output_with_args(&args_vec)?;
+
+    // Try to extract meaningful labels from the args
+    let left_label = extract_left_label(args);
+    let right_label = extract_right_label(args);
+
+    Ok((parse_diff_output(&diff_output), left_label, right_label))
 }
 
-fn get_diff_output(branch: &str) -> Result<String, Box<dyn Error>> {
-    let output = Command::new("git")
-        .args(["diff", &format!("{}..HEAD", branch)])
-        .output()?;
+// Compare uncommitted changes (git diff)
+pub fn get_uncommitted_changes() -> Result<(FileChanges, String, String), Box<dyn Error>> {
+    let diff_output = get_diff_output_with_args(&[])?;
+    Ok((
+        parse_diff_output(&diff_output),
+        "HEAD".to_string(),
+        "Working Tree".to_string(),
+    ))
+}
+
+// Compare a specific reference to working tree (git diff <ref>)
+pub fn get_changes_to_ref(
+    reference: &str,
+) -> Result<(FileChanges, String, String), Box<dyn Error>> {
+    let diff_output = get_diff_output_with_args(&[reference])?;
+    Ok((
+        parse_diff_output(&diff_output),
+        reference.to_string(),
+        "Working Tree".to_string(),
+    ))
+}
+
+// Compare two references (git diff <from>..<to>)
+pub fn get_changes_between(
+    from: &str,
+    to: &str,
+) -> Result<(FileChanges, String, String), Box<dyn Error>> {
+    let diff_output = get_diff_output_with_args(&[&format!("{}..{}", from, to)])?;
+    Ok((
+        parse_diff_output(&diff_output),
+        from.to_string(),
+        to.to_string(),
+    ))
+}
+
+fn get_diff_output_with_args(args: &[&str]) -> Result<String, Box<dyn Error>> {
+    let mut cmd_args = vec!["diff"];
+    cmd_args.extend_from_slice(args);
+
+    let output = Command::new("git").args(&cmd_args).output()?;
 
     if !output.status.success() {
-        return Err("Failed to execute git diff command".into());
+        return Err(format!(
+            "Failed to execute git diff command: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn extract_left_label(args: &str) -> String {
+    // Try to extract meaningful label from diff args
+    if args.contains("..") {
+        // For format like "branch1..branch2"
+        let parts: Vec<&str> = args.split("..").collect();
+        if !parts.is_empty() {
+            return parts[0].trim().to_string();
+        }
+    }
+    // Default label
+    "Base".to_string()
+}
+
+fn extract_right_label(args: &str) -> String {
+    // Try to extract meaningful label from diff args
+    if args.contains("..") {
+        // For format like "branch1..branch2"
+        let parts: Vec<&str> = args.split("..").collect();
+        if parts.len() > 1 {
+            return parts[1].trim().to_string();
+        }
+    }
+    // Default label
+    "Target".to_string()
 }
 
 fn parse_diff_output(diff_output: &str) -> FileChanges {
@@ -48,7 +121,9 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
                 base_lines.clear();
                 head_lines.clear();
             }
-            current_file = caps.get(1).unwrap().as_str().to_string();
+
+            // Use second capture group as file path in most cases (the "b/" file)
+            current_file = caps.get(2).unwrap().as_str().to_string();
             base_line_number = 1;
             head_line_number = 1;
             continue;

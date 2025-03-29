@@ -40,7 +40,8 @@ struct Change {
 
 struct App<'a> {
     file_changes: &'a FileChanges,
-    branch: &'a str,
+    left_label: &'a str,
+    right_label: &'a str,
     current_file_idx: usize,
     file_names: Vec<String>,
     scroll_positions: HashMap<String, u16>,
@@ -63,7 +64,11 @@ enum ViewMode {
     Unified,
 }
 
-pub fn run_app(file_changes: FileChanges, branch: &str) -> Result<(), Box<dyn Error>> {
+pub fn run_app(
+    file_changes: FileChanges,
+    left_label: &str,
+    right_label: &str,
+) -> Result<(), Box<dyn Error>> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -89,7 +94,8 @@ pub fn run_app(file_changes: FileChanges, branch: &str) -> Result<(), Box<dyn Er
 
     let app = App {
         file_changes: &file_changes,
-        branch,
+        left_label,
+        right_label,
         current_file_idx: 0,
         file_names: file_names_sorted,
         scroll_positions,
@@ -644,8 +650,8 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
         ViewMode::Unified => "Unified",
     };
     let title = format!(
-        " giff - Comparing {} to HEAD [{}] ",
-        app.branch, view_mode_text
+        " giff - Comparing {} to {} [{}] ",
+        app.left_label, app.right_label, view_mode_text
     );
     let header = Paragraph::new(title)
         .style(Style::default().fg(Color::White).bg(Color::Blue))
@@ -737,7 +743,7 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
     let base_paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(format!("{} ({})", app.branch, current_file))
+                .title(format!("{} ({})", app.left_label, current_file))
                 .borders(Borders::ALL),
         )
         .scroll((*scroll, 0));
@@ -746,7 +752,7 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
     let base_paragraph = match app.focused_pane {
         Pane::DiffContent => base_paragraph.block(
             Block::default()
-                .title(format!("{} ({})", app.branch, current_file))
+                .title(format!("{} ({})", app.left_label, current_file)) // Changed from app.branch to app.left_label
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow)),
         ),
@@ -755,7 +761,6 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(base_paragraph, area);
 }
-
 fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     let current_file = if let Some(file) = app.file_names.get(app.current_file_idx) {
         file
@@ -794,7 +799,7 @@ fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     let head_paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(format!("HEAD ({})", current_file))
+                .title(format!("{} ({})", app.right_label, current_file))
                 .borders(Borders::ALL),
         )
         .scroll((*scroll, 0));
@@ -879,34 +884,23 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    // Removed reference to undefined variable 'content'
+    // Fixed by directly using the unified_content in the Paragraph creation
+
+    // Use different style if DiffContent is focused
     let unified_paragraph = Paragraph::new(Text::from(unified_content))
         .block(
             Block::default()
                 .title(format!(
-                    "Unified Diff: {} vs HEAD ({})",
-                    app.branch, current_file
+                    "Unified Diff: {} vs {} ({})",
+                    app.left_label, app.right_label, current_file
                 ))
                 .borders(Borders::ALL),
         )
         .scroll((*scroll, 0));
 
-    // Use different style if DiffContent is focused
-    let unified_paragraph = match app.focused_pane {
-        Pane::DiffContent => unified_paragraph.block(
-            Block::default()
-                .title(format!(
-                    "Unified Diff: {} vs HEAD ({})",
-                    app.branch, current_file
-                ))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
-        _ => unified_paragraph,
-    };
-
     f.render_widget(unified_paragraph, area);
 }
-
 fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
     // First, clear the background by rendering a filled block
     let clear_block = Block::default()

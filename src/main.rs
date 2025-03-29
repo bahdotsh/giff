@@ -7,8 +7,17 @@ use std::error::Error;
 #[derive(Parser)]
 #[command(author="bahdotsh", version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "main")]
-    branch: String,
+    /// Base reference for diff (commit, branch, etc.)
+    #[arg(default_value = "")]
+    from: String,
+
+    /// Target reference for diff (commit, branch, etc.; defaults to current state)
+    #[arg(default_value = "")]
+    to: String,
+
+    /// Pass this to run diff with custom arguments
+    #[arg(short, long)]
+    diff_args: Option<String>,
 
     #[arg(short, long, help = "Auto-rebase if needed")]
     auto_rebase: bool,
@@ -41,11 +50,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Get diff data
-    let file_changes = diff::get_changes(&args.branch)?;
+    // Get diff data based on arguments
+    let (file_changes, left_label, right_label) = if let Some(diff_args) = &args.diff_args {
+        // Use custom diff arguments
+        diff::get_changes_with_args(diff_args)?
+    } else if !args.from.is_empty() && !args.to.is_empty() {
+        // Compare two refs (from..to)
+        diff::get_changes_between(&args.from, &args.to)?
+    } else if !args.from.is_empty() {
+        // Compare ref to working tree (like git diff <ref>)
+        diff::get_changes_to_ref(&args.from)?
+    } else {
+        // Default behavior: show uncommitted changes
+        diff::get_uncommitted_changes()?
+    };
 
     // Start the interactive UI
-    ui::run_app(file_changes, &args.branch)?;
+    ui::run_app(file_changes, &left_label, &right_label)?;
 
     Ok(())
 }
