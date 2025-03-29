@@ -1,90 +1,90 @@
-# giff - Git Diff Viewer and Interactive Rebaser
+# Giff - Git Diff Viewer with Interactive Rebase Support
 
-`giff` is a terminal-based Git diff viewer that allows you to easily visualize changes between branches and selectively apply specific modifications from one branch to another.
+Giff is a terminal-based Git diff viewer with interactive rebase capabilities that allows you to view and manage changes between branches.
 
 ## Features
 
-### Powerful Diff Viewing
-- Side-by-side comparison of changes between branches
-- Unified diff view option for compact rendering
-- Color-coded additions and deletions
-- Keyboard navigation through files and changes
-
-### Interactive Rebase Mode
-- Selectively apply changes from one branch to another
-- Review each modification individually with context
-- Accept or reject changes with simple keystrokes
-- See clear comparison between current and incoming changes
-- Apply only the changes you want
+- **Side-by-Side or Unified Diff View**: Choose between two different viewing modes for comparing changes
+- **Interactive Navigation**: Easily navigate through files and changes with keyboard shortcuts
+- **Rebase Detection**: Automatically detects when a rebase is needed
+- **Interactive Rebasing**: Accept or reject changes during rebase right from the interface
+- **Auto-Rebase Option**: Command-line flag to automatically rebase when needed
 
 ## Installation
 
+Clone the repository and build the project:
+
 ```bash
-cargo install giff
+git clone https://github.com/your-username/giff.git
+cd giff
+cargo build --release
 ```
+
+The compiled binary will be available at `target/release/giff`.
 
 ## Usage
 
 ```bash
-# Compare current branch with main
+# View diff between main branch and HEAD
 giff
 
-# Compare specific branch with HEAD
-giff -b feature-branch
+# View diff between a specific branch and HEAD
+giff --branch feature-branch
+
+# Automatically rebase if needed
+giff --auto-rebase
 ```
 
-## Keyboard Controls
+## Keyboard Shortcuts
 
-### Diff Viewing Mode
-- `j`/`k` or Up/Down: Navigate through files and content
-- `Tab` or `h`/`l`: Switch focus between file list and diff content
-- `u`: Toggle between side-by-side and unified diff views
-- `r`: Enter rebase mode
-- `q` or `Esc`: Quit
+### Diff Mode
+
+| Key | Action |
+|-----|--------|
+| `j` / `Down` | Navigate down |
+| `k` / `Up` | Navigate up |
+| `Tab` | Toggle focus between file list and diff content |
+| `h` / `Left` | Focus file list |
+| `l` / `Right` | Focus diff content |
+| `u` | Toggle between unified and side-by-side view |
+| `r` | Enter rebase mode |
+| `q` / `Esc` | Quit |
 
 ### Rebase Mode
-- `j`/`k`: Navigate between changes
-- `n`/`p`: Navigate between files with changes
-- `a`: Accept the change (incoming modification)
-- `x`: Reject the change (keep current version)
-- `c`: Commit all accepted changes to disk
-- `q` or `Esc`: Exit rebase mode without applying changes
 
-## The Rebase Workflow
+| Key | Action |
+|-----|--------|
+| `j` / `Down` | Navigate to next change |
+| `k` / `Up` | Navigate to previous change |
+| `a` | Accept change |
+| `x` | Reject change |
+| `n` | Go to next file with changes |
+| `p` | Go to previous file with changes |
+| `c` | Commit accepted changes |
+| `q` / `Esc` | Cancel and return to diff mode |
 
-The interactive rebase mode allows you to selectively apply changes from your target branch to your current branch:
+### Rebase Notification Dialog
 
-1. Start `giff` and view the differences between branches
-2. Press `r` to enter rebase mode
-3. For each change:
-   - Review the current code and the incoming modification
-   - For removed lines, you'll see both the current line and its replacement
-   - Press `a` to accept the incoming change
-   - Press `x` to reject it and keep your current code
-4. Navigate between changes with `j`/`k` and between files with `n`/`p`
-5. When finished reviewing, press `c` to commit all accepted changes
-6. The changes will be applied to your working copy
+| Key | Action |
+|-----|--------|
+| `r` | Perform rebase |
+| `i` | Ignore rebase suggestion |
+| `Esc` | Dismiss notification |
 
-This enables you to cherry-pick specific changes from another branch without having to manage the complexity of Git's cherry-pick or rebase commands directly.
+## Rebase Functionality
 
-## Example
+Giff detects situations when a rebase may be needed, such as:
 
-Let's say you've made several changes in a feature branch, but main has also progressed with some changes you want to incorporate:
+1. When your local branch is behind its upstream
+2. When your branch has diverged from its upstream
 
-```
-$ giff -b main
-```
+When a rebase is recommended, Giff will:
 
-This shows you all differences between your current branch and main. After reviewing the diffs:
+1. Display a notification with details about why a rebase is needed
+2. Offer options to perform the rebase from within the app or ignore the suggestion
+3. If you choose to rebase, Giff will handle the process and update the display
 
-1. Press `r` to enter rebase mode
-2. Use `j`/`k` to navigate through the individual changes
-3. For each change:
-   - See both the original code and the new version
-   - Accept changes that you want (`a`) and reject others (`x`)
-4. Press `c` to apply all accepted changes to your working files
-
-This creates a selective merge of only the changes you want, without needing to resolve conflicts manually.
+You can also use the `--auto-rebase` flag to automatically perform a rebase if needed without prompting.
 
 ## Contributing
 

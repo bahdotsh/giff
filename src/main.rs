@@ -1,5 +1,4 @@
 mod diff;
-mod display;
 mod ui;
 
 use clap::Parser;
