@@ -1,5 +1,5 @@
 mod diff;
-mod display;
+mod ui;
 
 use clap::Parser;
 use std::error::Error;
@@ -17,8 +17,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Get diff data
     let file_changes = diff::get_changes(&args.branch)?;
 
-    // Display the changes
-    display::show_diff_table(&file_changes, &args.branch)?;
+    // Start the interactive UI
+    ui::run_app(file_changes, &args.branch)?;
 
     Ok(())
 }
