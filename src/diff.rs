@@ -1,26 +1,44 @@
 use regex::Regex;
 use std::collections::HashMap;
+use std::error::Error;
+use std::process::Command;
 
-pub fn parse_diff_output(
-    diff_output: &str,
-) -> HashMap<String, (Vec<(usize, String)>, Vec<(usize, String)>)> {
+pub type LineChange = (usize, String);
+pub type FileChanges = HashMap<String, (Vec<LineChange>, Vec<LineChange>)>;
+
+pub fn get_changes(branch: &str) -> Result<FileChanges, Box<dyn Error>> {
+    let diff_output = get_diff_output(branch)?;
+    Ok(parse_diff_output(&diff_output))
+}
+
+fn get_diff_output(branch: &str) -> Result<String, Box<dyn Error>> {
+    let output = Command::new("git")
+        .args(["diff", &format!("{}..HEAD", branch)])
+        .output()?;
+
+    if !output.status.success() {
+        return Err("Failed to execute git diff command".into());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn parse_diff_output(diff_output: &str) -> FileChanges {
     let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap();
     let hunk_header_regex = Regex::new(r"^@@ -(\d+),\d+ \+(\d+),\d+ @@").unwrap();
-    let mut file_changes: HashMap<String, (Vec<(usize, String)>, Vec<(usize, String)>)> =
-        HashMap::new();
+    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
+
+    let mut file_changes = HashMap::new();
     let mut current_file = String::new();
     let mut base_lines = Vec::new();
     let mut head_lines = Vec::new();
     let mut base_line_number = 1;
     let mut head_line_number = 1;
 
-    // Regex to remove ANSI escape codes
-    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
-
     for line in diff_output.lines() {
-        let trimmed_line = line.trim();
-        let trimmed_line = ansi_escape_regex.replace_all(trimmed_line, "");
+        let trimmed_line = ansi_escape_regex.replace_all(line.trim(), "");
 
+        // Handle file header
         if let Some(caps) = diff_file_regex.captures(trimmed_line.as_ref()) {
             if !current_file.is_empty() {
                 file_changes.insert(
@@ -36,12 +54,14 @@ pub fn parse_diff_output(
             continue;
         }
 
+        // Handle hunk header
         if let Some(caps) = hunk_header_regex.captures(trimmed_line.as_ref()) {
             base_line_number = caps.get(1).unwrap().as_str().parse::<usize>().unwrap();
             head_line_number = caps.get(2).unwrap().as_str().parse::<usize>().unwrap();
             continue;
         }
 
+        // Skip metadata lines
         if trimmed_line.starts_with("index")
             || trimmed_line.starts_with("---")
             || trimmed_line.starts_with("+++")
@@ -51,6 +71,7 @@ pub fn parse_diff_output(
             continue;
         }
 
+        // Process diff lines
         if trimmed_line.starts_with('-') {
             base_lines.push((base_line_number, trimmed_line.to_string()));
             base_line_number += 1;
@@ -65,7 +86,7 @@ pub fn parse_diff_output(
         }
     }
 
-    // Insert last file changes
+    // Add last file changes
     if !current_file.is_empty() {
         file_changes.insert(current_file, (base_lines, head_lines));
     }
