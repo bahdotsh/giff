@@ -14,7 +14,7 @@ The recommended way to install `giff` is using Rust's package manager, Cargo. He
 
 Using Cargo Install (Recommended)
 
-`cargo install zp`
+`cargo install giff`
 
 Clone the repository and build the project:
 
