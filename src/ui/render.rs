@@ -2,7 +2,10 @@ use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{
+        Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState,
+    },
     Frame,
 };
 
@@ -10,325 +13,407 @@ use super::rebase::render_rebase_ui;
 use super::syntax::highlight_line_changes;
 use super::types::*;
 
+// ── Color Palette ──────────────────────────────────────────────────────────
+const ACCENT: Color = Color::Rgb(130, 170, 255);
+const BORDER_FOCUSED: Color = Color::Rgb(130, 170, 255);
+const BORDER_DIM: Color = Color::Rgb(55, 58, 65);
+const FG_DIM: Color = Color::Rgb(100, 105, 115);
+const FG_NORMAL: Color = Color::Rgb(190, 195, 205);
+const FG_BRIGHT: Color = Color::Rgb(230, 233, 240);
+const BG_HEADER: Color = Color::Rgb(25, 28, 36);
+const BG_SELECTION: Color = Color::Rgb(35, 48, 72);
+const FG_ADDED: Color = Color::Rgb(80, 200, 100);
+const FG_REMOVED: Color = Color::Rgb(225, 85, 85);
+const FG_KEY: Color = Color::Rgb(220, 185, 100);
+
 pub fn ui(f: &mut Frame, app: &mut App) {
     let size = f.area();
 
-    // Create main layout with 3 parts: header, content, footer
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Header
-            Constraint::Min(0),    // Main content
-            Constraint::Length(3), // Help
+            Constraint::Length(1), // Header
+            Constraint::Min(0),   // Content
+            Constraint::Length(1), // Help
         ])
         .split(size);
 
-    // Render header with title and controls
     render_header(f, app, main_chunks[0]);
 
-    // Main content depends on the app mode
     match app.app_mode {
-        AppMode::Diff => {
-            // Render diff mode content
-            match app.view_mode {
-                ViewMode::SideBySide => {
-                    let content_chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Percentage(20), // File list
-                            Constraint::Percentage(40), // Base content
-                            Constraint::Percentage(40), // Head content
-                        ])
-                        .split(main_chunks[1]);
+        AppMode::Diff => match app.view_mode {
+            ViewMode::SideBySide => {
+                let content_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(20),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(40),
+                    ])
+                    .split(main_chunks[1]);
 
-                    // Render file list
-                    render_file_list(f, app, content_chunks[0]);
-
-                    // Only render content if files exist
-                    if !app.file_names.is_empty() {
-                        // Render base content
-                        render_base_content(f, app, content_chunks[1]);
-
-                        // Render head content
-                        render_head_content(f, app, content_chunks[2]);
-                    }
-                }
-                ViewMode::Unified => {
-                    let content_chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Percentage(20), // File list
-                            Constraint::Percentage(80), // Unified content
-                        ])
-                        .split(main_chunks[1]);
-
-                    // Render file list
-                    render_file_list(f, app, content_chunks[0]);
-
-                    // Only render content if files exist
-                    if !app.file_names.is_empty() {
-                        // Render unified diff
-                        render_unified_diff(f, app, content_chunks[1]);
-                    }
+                render_file_list(f, app, content_chunks[0]);
+                if !app.file_names.is_empty() {
+                    render_base_content(f, app, content_chunks[1]);
+                    render_head_content(f, app, content_chunks[2]);
                 }
             }
-        }
+            ViewMode::Unified => {
+                let content_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(20),
+                        Constraint::Percentage(80),
+                    ])
+                    .split(main_chunks[1]);
+
+                render_file_list(f, app, content_chunks[0]);
+                if !app.file_names.is_empty() {
+                    render_unified_diff(f, app, content_chunks[1]);
+                }
+            }
+        },
         AppMode::Rebase => {
-            // Render rebase mode content
             render_rebase_ui(f, app, main_chunks[1]);
         }
     }
 
-    // Render help footer
     render_help(f, app, main_chunks[2]);
 
-    // Render rebase notification if needed
     if app.show_rebase_modal {
         render_rebase_notification(f, app, size);
     }
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
-    let view_mode_text = match app.view_mode {
+    let view_mode = match app.view_mode {
         ViewMode::SideBySide => "Side-by-Side",
         ViewMode::Unified => "Unified",
     };
-    let title = format!(
-        " giff - Comparing {} to {} [{}] ",
-        app.left_label, app.right_label, view_mode_text
-    );
-    let header = Paragraph::new(title)
-        .style(Style::default().fg(Color::White).bg(Color::Blue))
-        .block(Block::default().borders(Borders::ALL));
+    let mode = match app.app_mode {
+        AppMode::Diff => "DIFF",
+        AppMode::Rebase => "REBASE",
+    };
+    let file_count = app.file_names.len();
+    let current = if file_count > 0 {
+        app.current_file_idx + 1
+    } else {
+        0
+    };
+    let current_file = app
+        .file_names
+        .get(app.current_file_idx)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+
+    let mut spans = vec![
+        Span::styled(
+            " giff ",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("\u{2502} ", Style::default().fg(BORDER_DIM)),
+        Span::styled(
+            format!("{} \u{2192} {}", app.left_label, app.right_label),
+            Style::default().fg(FG_NORMAL),
+        ),
+        Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)),
+        Span::styled(mode.to_owned(), Style::default().fg(ACCENT)),
+        Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)),
+        Span::styled(view_mode.to_owned(), Style::default().fg(FG_DIM)),
+    ];
+
+    if !current_file.is_empty() {
+        spans.push(Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)));
+        spans.push(Span::styled(
+            current_file.to_owned(),
+            Style::default().fg(FG_BRIGHT),
+        ));
+    }
+
+    spans.push(Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)));
+    spans.push(Span::styled(
+        format!("{}/{}", current, file_count),
+        Style::default().fg(FG_DIM),
+    ));
+
+    let header = Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_HEADER));
     f.render_widget(header, area);
 }
 
 pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
+    let is_focused = matches!(app.focused_pane, Pane::FileList);
+    let border_color = if is_focused {
+        BORDER_FOCUSED
+    } else {
+        BORDER_DIM
+    };
+    let title_style = if is_focused {
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(FG_DIM)
+    };
+
+    let block = Block::default()
+        .title(Span::styled(" Files ", title_style))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color));
+
+    if app.file_names.is_empty() {
+        let empty = Paragraph::new(Span::styled(
+            "  No changes",
+            Style::default().fg(FG_DIM),
+        ))
+        .block(block);
+        f.render_widget(empty, area);
+        return;
+    }
+
     let items: Vec<ListItem> = app
         .file_names
         .iter()
         .enumerate()
         .map(|(i, file)| {
-            let content = Line::from(Span::styled(
-                file.clone(),
-                Style::default().add_modifier(if i == app.current_file_idx {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                }),
-            ));
-            ListItem::new(content)
+            let (adds, dels) = count_file_changes(app, file);
+            let is_current = i == app.current_file_idx;
+            let name_style = if is_current {
+                Style::default()
+                    .fg(FG_BRIGHT)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(FG_NORMAL)
+            };
+
+            let mut spans = vec![Span::styled(file.clone(), name_style)];
+            if adds > 0 || dels > 0 {
+                spans.push(Span::styled(" ", Style::default()));
+                if adds > 0 {
+                    spans.push(Span::styled(
+                        format!("+{}", adds),
+                        Style::default().fg(FG_ADDED),
+                    ));
+                }
+                if adds > 0 && dels > 0 {
+                    spans.push(Span::styled(" ", Style::default()));
+                }
+                if dels > 0 {
+                    spans.push(Span::styled(
+                        format!("-{}", dels),
+                        Style::default().fg(FG_REMOVED),
+                    ));
+                }
+            }
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
-    let files_list = List::new(items)
-        .block(Block::default().title("Files").borders(Borders::ALL))
-        .highlight_style(
-            Style::default()
-                .bg(Color::Blue)
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol(">> ");
-
-    // Use different style if FileList is focused
-    let files_list = match app.focused_pane {
-        Pane::FileList => files_list.block(
-            Block::default()
-                .title("Files")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
-        _ => files_list,
-    };
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().bg(BG_SELECTION))
+        .highlight_symbol("\u{258c} ");
 
     f.render_stateful_widget(
-        files_list,
+        list,
         area,
         &mut ratatui::widgets::ListState::default().with_selected(Some(app.current_file_idx)),
     );
 }
 
+fn render_diff_pane(
+    f: &mut Frame,
+    title: &str,
+    lines: &[(usize, String)],
+    filename: &str,
+    scroll: u16,
+    is_focused: bool,
+    area: Rect,
+) {
+    let border_color = if is_focused {
+        BORDER_FOCUSED
+    } else {
+        BORDER_DIM
+    };
+    let title_style = if is_focused {
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(FG_DIM)
+    };
+
+    let highlighted = highlight_line_changes(lines, filename);
+    let total_lines = highlighted.len();
+    let content = Text::from(highlighted);
+    let visible_height = area.height.saturating_sub(2) as usize;
+
+    let title_text = if total_lines > visible_height {
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let pos = (scroll as usize).min(max_scroll);
+        let pct = if max_scroll > 0 {
+            (pos * 100) / max_scroll
+        } else {
+            0
+        };
+        format!(" {} ({}%) ", title, pct)
+    } else {
+        format!(" {} ", title)
+    };
+
+    let block = Block::default()
+        .title(Span::styled(title_text, title_style))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color));
+
+    let paragraph = Paragraph::new(content).block(block).scroll((scroll, 0));
+    f.render_widget(paragraph, area);
+
+    // Scrollbar
+    if total_lines > visible_height {
+        let scrollbar_area = Rect::new(
+            area.x,
+            area.y + 1,
+            area.width,
+            area.height.saturating_sub(2),
+        );
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let mut scrollbar_state =
+            ScrollbarState::new(max_scroll).position((scroll as usize).min(max_scroll));
+        f.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            scrollbar_area,
+            &mut scrollbar_state,
+        );
+    }
+}
+
 fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
-    let current_file = if let Some(file) = app.file_names.get(app.current_file_idx) {
-        file
-    } else {
-        return; // No file selected
+    let current_file = match app.file_names.get(app.current_file_idx) {
+        Some(f) => f,
+        None => return,
     };
-
-    let (base_lines, _) = if let Some(changes) = app.file_changes.get(current_file) {
-        changes
-    } else {
-        return; // File not found in changes
+    let (base_lines, _) = match app.file_changes.get(current_file) {
+        Some(c) => c,
+        None => return,
     };
+    let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
+    let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
-    let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-
-    // Use syntax highlighting
-    let highlighted_content = highlight_line_changes(base_lines, current_file);
-    let content = Text::from(highlighted_content);
-
-    let base_paragraph = Paragraph::new(content)
-        .block(
-            Block::default()
-                .title(format!("{} ({})", app.left_label, current_file))
-                .borders(Borders::ALL),
-        )
-        .scroll((*scroll, 0));
-
-    // Use different style if DiffContent is focused
-    let base_paragraph = match app.focused_pane {
-        Pane::DiffContent => base_paragraph.block(
-            Block::default()
-                .title(format!("{} ({})", app.left_label, current_file))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
-        _ => base_paragraph,
-    };
-
-    f.render_widget(base_paragraph, area);
+    render_diff_pane(
+        f,
+        app.left_label,
+        base_lines,
+        current_file,
+        scroll,
+        is_focused,
+        area,
+    );
 }
 
 fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
-    let current_file = if let Some(file) = app.file_names.get(app.current_file_idx) {
-        file
-    } else {
-        return; // No file selected
+    let current_file = match app.file_names.get(app.current_file_idx) {
+        Some(f) => f,
+        None => return,
     };
-
-    let (_, head_lines) = if let Some(changes) = app.file_changes.get(current_file) {
-        changes
-    } else {
-        return; // File not found in changes
+    let (_, head_lines) = match app.file_changes.get(current_file) {
+        Some(c) => c,
+        None => return,
     };
+    let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
+    let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
-    let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-
-    // Use syntax highlighting
-    let highlighted_content = highlight_line_changes(head_lines, current_file);
-    let content = Text::from(highlighted_content);
-
-    let head_paragraph = Paragraph::new(content)
-        .block(
-            Block::default()
-                .title(format!("{} ({})", app.right_label, current_file))
-                .borders(Borders::ALL),
-        )
-        .scroll((*scroll, 0));
-
-    // Use different style if DiffContent is focused
-    let head_paragraph = match app.focused_pane {
-        Pane::DiffContent => head_paragraph.block(
-            Block::default()
-                .title(format!("{} ({})", app.right_label, current_file))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
-        ),
-        _ => head_paragraph,
-    };
-
-    f.render_widget(head_paragraph, area);
+    render_diff_pane(
+        f,
+        app.right_label,
+        head_lines,
+        current_file,
+        scroll,
+        is_focused,
+        area,
+    );
 }
 
 fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
-    let current_file = if let Some(file) = app.file_names.get(app.current_file_idx) {
-        file
-    } else {
-        return; // No file selected
+    let current_file = match app.file_names.get(app.current_file_idx) {
+        Some(f) => f,
+        None => return,
     };
-
-    let (base_lines, head_lines) = if let Some(changes) = app.file_changes.get(current_file) {
-        changes
-    } else {
-        return; // File not found in changes
+    let (base_lines, head_lines) = match app.file_changes.get(current_file) {
+        Some(c) => c,
+        None => return,
     };
+    let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
+    let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
-    let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-
-    // Create a vector to store the unified lines for syntax highlighting
+    // Build unified lines
     let mut unified_lines: Vec<(usize, String)> = Vec::new();
-
-    // Collect all line numbers from both sides
-    let mut all_lines: Vec<(usize, bool)> = Vec::new(); // (line_number, is_head)
+    let mut all_lines: Vec<(usize, bool)> = Vec::new();
     for (num, _) in base_lines {
         all_lines.push((*num, false));
     }
     for (num, _) in head_lines {
         all_lines.push((*num, true));
     }
-
-    // Sort by line number
     all_lines.sort_by_key(|(num, _)| *num);
 
-    // Process lines
     let mut processed_lines = Vec::new();
     for (num, is_head) in all_lines {
         if is_head {
-            // Find this line in head_lines
             if let Some((_, line)) = head_lines.iter().find(|(line_num, _)| *line_num == num) {
                 if !line.starts_with('-') && !processed_lines.contains(&num) {
                     unified_lines.push((num, line.clone()));
                     processed_lines.push(num);
                 }
             }
-        } else {
-            // Find this line in base_lines
-            if let Some((_, line)) = base_lines.iter().find(|(line_num, _)| *line_num == num) {
-                if !line.starts_with('+') && !processed_lines.contains(&num) {
-                    unified_lines.push((num, line.clone()));
-                    processed_lines.push(num);
-                }
+        } else if let Some((_, line)) = base_lines.iter().find(|(line_num, _)| *line_num == num) {
+            if !line.starts_with('+') && !processed_lines.contains(&num) {
+                unified_lines.push((num, line.clone()));
+                processed_lines.push(num);
             }
         }
     }
 
-    // Apply syntax highlighting to unified diff
-    let highlighted_content = highlight_line_changes(&unified_lines, current_file);
-    let content = Text::from(highlighted_content);
-
-    // Use different style if DiffContent is focused
-    let unified_paragraph = Paragraph::new(content)
-        .block(
-            Block::default()
-                .title(format!(
-                    "Unified Diff: {} vs {} ({})",
-                    app.left_label, app.right_label, current_file
-                ))
-                .borders(Borders::ALL),
-        )
-        .scroll((*scroll, 0));
-
-    f.render_widget(unified_paragraph, area);
+    let title = format!("{} vs {}", app.left_label, app.right_label);
+    render_diff_pane(
+        f,
+        &title,
+        &unified_lines,
+        current_file,
+        scroll,
+        is_focused,
+        area,
+    );
 }
 
 fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
     if let Some(notification) = &app.rebase_notification {
-        // Calculate modal size
         let mut max_line_length = 0;
         let mut line_count = 0;
         for line in notification.lines() {
             max_line_length = max_line_length.max(line.len());
             line_count += 1;
         }
-        let modal_width = (max_line_length as u16 + 4).min(80);
-        let modal_height = (line_count as u16 + 6).min(20);
-
+        let modal_width = (max_line_length as u16 + 6).min(70);
+        let modal_height = (line_count as u16 + 6).min(16);
         let modal_area = centered_rect(modal_width, modal_height, area);
 
-        // Render background
         let background = Block::default()
-            .style(Style::default().bg(Color::Black))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow))
-            .title("Rebase Recommended");
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                " Rebase Recommended ",
+                Style::default()
+                    .fg(ACCENT)
+                    .add_modifier(Modifier::BOLD),
+            ));
 
-        f.render_widget(Clear, modal_area); // Clear the area
+        f.render_widget(Clear, modal_area);
         f.render_widget(&background, modal_area);
 
         let inner_area = background.inner(modal_area);
 
-        // Split into message area and buttons
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -337,19 +422,19 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
             ])
             .split(inner_area);
 
-        // Render notification message
         let message = Paragraph::new(notification.clone())
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(FG_NORMAL))
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
-
         f.render_widget(message, chunks[0]);
 
-        // Render buttons
-        let buttons = Paragraph::new("Press 'r' to rebase now   Press 'i' to ignore")
-            .style(Style::default().fg(Color::White))
-            .alignment(Alignment::Center);
-
+        let button_spans = vec![
+            Span::styled(" r ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
+            Span::styled(" Rebase now  ", Style::default().fg(FG_NORMAL)),
+            Span::styled(" i ", Style::default().fg(BG_HEADER).bg(FG_DIM)),
+            Span::styled(" Ignore", Style::default().fg(FG_NORMAL)),
+        ];
+        let buttons = Paragraph::new(Line::from(button_spans)).alignment(Alignment::Center);
         f.render_widget(buttons, chunks[1]);
     }
 }
@@ -385,26 +470,63 @@ fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
 }
 
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
-    // Show status message if present, otherwise show help text
     if let Some(msg) = &app.status_message {
         let is_error = msg.starts_with("Error");
-        let color = if is_error { Color::Red } else { Color::Green };
-        let status = Paragraph::new(msg.as_str())
-            .style(Style::default().fg(color).add_modifier(Modifier::BOLD))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(status, area);
+        let color = if is_error { FG_REMOVED } else { FG_ADDED };
+        let help = Paragraph::new(Line::from(Span::styled(
+            format!(" {}", msg),
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        )))
+        .style(Style::default().bg(BG_HEADER));
+        f.render_widget(help, area);
         return;
     }
 
-    let help_text = match app.app_mode {
-        AppMode::Diff => "Esc/q: Quit | j/k: Navigate | Tab: Change focus | h/l: Switch panes | u: Toggle view | r: Enter rebase mode",
-        AppMode::Rebase => "Esc/q: Cancel | j/k: Navigate changes | a: Accept change | x: Reject change | c: Commit changes",
+    let pairs: &[(&str, &str)] = match app.app_mode {
+        AppMode::Diff => &[
+            ("q", "Quit"),
+            ("j/k", "Navigate"),
+            ("Tab", "Focus"),
+            ("h/l", "Panes"),
+            ("u", "View"),
+            ("PgUp/Dn", "Page"),
+            ("r", "Rebase"),
+        ],
+        AppMode::Rebase => &[
+            ("Esc", "Back"),
+            ("j/k", "Navigate"),
+            ("a", "Accept"),
+            ("x", "Reject"),
+            ("n/p", "Files"),
+            ("c", "Commit"),
+        ],
     };
 
-    let help = Paragraph::new(help_text)
-        .style(Style::default().fg(Color::White))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
+    let mut spans: Vec<Span> = vec![Span::styled(" ", Style::default())];
+    for (i, (key, desc)) in pairs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled("  ", Style::default().fg(BORDER_DIM)));
+        }
+        spans.push(Span::styled(
+            (*key).to_owned(),
+            Style::default().fg(FG_KEY),
+        ));
+        spans.push(Span::styled(
+            format!(" {}", desc),
+            Style::default().fg(FG_DIM),
+        ));
+    }
+
+    let help = Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_HEADER));
     f.render_widget(help, area);
+}
+
+fn count_file_changes(app: &App, file: &str) -> (usize, usize) {
+    if let Some((base, head)) = app.file_changes.get(file) {
+        let dels = base.iter().filter(|(_, l)| l.starts_with('-')).count();
+        let adds = head.iter().filter(|(_, l)| l.starts_with('+')).count();
+        (adds, dels)
+    } else {
+        (0, 0)
+    }
 }

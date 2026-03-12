@@ -2,13 +2,25 @@ use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 use std::collections::{HashMap, HashSet};
 
 use super::render::render_file_list;
 use super::types::*;
+
+// Colors (matching render.rs palette)
+const ACCENT: Color = Color::Rgb(130, 170, 255);
+const BORDER_FOCUSED: Color = Color::Rgb(130, 170, 255);
+const BORDER_DIM: Color = Color::Rgb(55, 58, 65);
+const FG_DIM: Color = Color::Rgb(100, 105, 115);
+const FG_BRIGHT: Color = Color::Rgb(230, 233, 240);
+const FG_ADDED: Color = Color::Rgb(80, 200, 100);
+const FG_REMOVED: Color = Color::Rgb(225, 85, 85);
+const FG_KEY: Color = Color::Rgb(220, 185, 100);
+const BG_ACCEPTED: Color = Color::Rgb(15, 40, 15);
+const BG_REJECTED: Color = Color::Rgb(45, 15, 15);
 
 pub fn prepare_rebase_changes(app: &mut App) {
     app.rebase_changes.clear();
@@ -159,69 +171,105 @@ pub fn prepare_rebase_changes(app: &mut App) {
 }
 
 pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
-    // First, clear the background by rendering a filled block
-    let clear_block = Block::default()
-        .style(Style::default().bg(Color::Black)) // Use the terminal's default background
-        .borders(Borders::NONE);
-    f.render_widget(clear_block, area);
-
-    // Now, set up the rebase UI layout
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(20), // File list
-            Constraint::Percentage(80), // Rebase content
+            Constraint::Percentage(20),
+            Constraint::Percentage(80),
         ])
         .split(area);
 
-    // Render file list
     render_file_list(f, app, content_chunks[0]);
 
-    // Render rebase content area
     if let Some(current_file) = app.file_names.get(app.current_file_idx) {
-        // Create a clean background for the rebase area
-        let rebase_bg = Block::default()
-            .style(Style::default().bg(Color::Black))
+        let rebase_block = Block::default()
             .borders(Borders::ALL)
-            .title(format!("Rebase: {}", current_file));
-        f.render_widget(&rebase_bg, content_chunks[1]);
-
-        let inner_area = rebase_bg.inner(content_chunks[1]);
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(BORDER_FOCUSED))
+            .title(Span::styled(
+                format!(" Rebase: {} ", current_file),
+                Style::default()
+                    .fg(ACCENT)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        f.render_widget(&rebase_block, content_chunks[1]);
+        let inner_area = rebase_block.inner(content_chunks[1]);
 
         if let Some(changes) = app.rebase_changes.get(current_file) {
             if changes.is_empty() {
-                // Show a message if there are no changes
-                let no_changes_text = Paragraph::new("No changes to rebase in this file")
-                    .style(Style::default().fg(Color::White))
-                    .alignment(Alignment::Center);
-
-                f.render_widget(no_changes_text, inner_area);
+                let msg = Paragraph::new(Span::styled(
+                    "No changes to rebase in this file",
+                    Style::default().fg(FG_DIM),
+                ))
+                .alignment(Alignment::Center);
+                f.render_widget(msg, inner_area);
                 return;
             }
 
-            // Split the rebase area into current change and context
+            // Count states for progress
+            let accepted = changes
+                .iter()
+                .filter(|c| c.state == ChangeState::Accepted)
+                .count();
+            let rejected = changes
+                .iter()
+                .filter(|c| c.state == ChangeState::Rejected)
+                .count();
+            let remaining = changes.len() - accepted - rejected;
+
             let rebase_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Percentage(40), // Current change
-                    Constraint::Percentage(60), // Context
+                    Constraint::Length(2),      // Progress
+                    Constraint::Percentage(50), // Current change
+                    Constraint::Min(0),         // Context
                 ])
                 .split(inner_area);
 
-            // Current change section
+            // Progress indicator
+            let progress_spans = vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!(
+                        "Change {}/{}",
+                        app.current_change_idx + 1,
+                        changes.len()
+                    ),
+                    Style::default()
+                        .fg(FG_BRIGHT)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  \u{2502}  ", Style::default().fg(BORDER_DIM)),
+                Span::styled(
+                    format!("{} accepted", accepted),
+                    Style::default().fg(FG_ADDED),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!("{} rejected", rejected),
+                    Style::default().fg(FG_REMOVED),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!("{} remaining", remaining),
+                    Style::default().fg(FG_DIM),
+                ),
+            ];
+            let progress = Paragraph::new(Line::from(progress_spans));
+            f.render_widget(progress, rebase_chunks[0]);
+
+            // Current change
             if app.current_change_idx < changes.len() {
                 let current_change = &changes[app.current_change_idx];
-
-                // Format the current change nicely
                 let change_type = if current_change.is_base {
                     "Removed"
                 } else {
                     "Added"
                 };
-                let state_symbol = match current_change.state {
-                    ChangeState::Unselected => "[ ]",
-                    ChangeState::Accepted => "[✓]",
-                    ChangeState::Rejected => "[✗]",
+                let (state_symbol, state_color) = match current_change.state {
+                    ChangeState::Unselected => ("\u{25cb}", FG_DIM),
+                    ChangeState::Accepted => ("\u{25cf}", FG_ADDED),
+                    ChangeState::Rejected => ("\u{25cf}", FG_REMOVED),
                 };
 
                 let line_content = current_change
@@ -230,134 +278,118 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                     .or_else(|| current_change.content.strip_prefix('-'))
                     .unwrap_or(&current_change.content);
 
-                let header = format!(
-                    "{} {} (Line {})",
-                    state_symbol, change_type, current_change.line_num
-                );
+                let type_color = if current_change.is_base {
+                    FG_REMOVED
+                } else {
+                    FG_ADDED
+                };
 
                 let mut content_text = vec![
-                    Line::from(Span::styled(
-                        header,
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    )),
+                    Line::from(vec![
+                        Span::styled(
+                            format!(" {} ", state_symbol),
+                            Style::default().fg(state_color),
+                        ),
+                        Span::styled(
+                            format!("{} ", change_type),
+                            Style::default()
+                                .fg(type_color)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("(line {})", current_change.line_num),
+                            Style::default().fg(FG_DIM),
+                        ),
+                    ]),
                     Line::from(""),
                     Line::from(Span::styled(
-                        format!("Current: {}", line_content),
-                        Style::default()
-                            .fg(if current_change.is_base {
-                                Color::Red
-                            } else {
-                                Color::Green
-                            })
-                            .add_modifier(Modifier::BOLD),
+                        format!("  {}", line_content),
+                        Style::default().fg(type_color),
                     )),
                 ];
 
-                // If there's paired content (for changed lines), show it
-                if let Some(paired_content) = &current_change.paired_content {
-                    let paired_text = paired_content
+                if let Some(paired) = &current_change.paired_content {
+                    let paired_text = paired
                         .strip_prefix('+')
-                        .or_else(|| paired_content.strip_prefix('-'))
-                        .unwrap_or(paired_content);
-
+                        .or_else(|| paired.strip_prefix('-'))
+                        .unwrap_or(paired);
                     content_text.push(Line::from(""));
-                    content_text.push(Line::from(Span::styled(
-                        format!("Incoming: {}", paired_text),
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    )));
+                    content_text.push(Line::from(vec![
+                        Span::styled("  \u{2192} ", Style::default().fg(FG_DIM)),
+                        Span::styled(
+                            paired_text.to_owned(),
+                            Style::default()
+                                .fg(FG_ADDED)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ]));
 
-                    // Add explicit choice text for removed lines
                     if current_change.is_base {
                         content_text.push(Line::from(""));
-                        content_text.push(Line::from(Span::styled(
-                            "Press 'a' to ACCEPT the incoming change (green)",
-                            Style::default().fg(Color::Green),
-                        )));
-                        content_text.push(Line::from(Span::styled(
-                            "Press 'x' to KEEP the current line and reject the incoming change",
-                            Style::default().fg(Color::Red),
-                        )));
+                        content_text.push(Line::from(vec![
+                            Span::styled("  ", Style::default()),
+                            Span::styled("a", Style::default().fg(FG_KEY)),
+                            Span::styled(" accept incoming  ", Style::default().fg(FG_DIM)),
+                            Span::styled("x", Style::default().fg(FG_KEY)),
+                            Span::styled(" keep current", Style::default().fg(FG_DIM)),
+                        ]));
                     }
                 }
 
-                let change_block = Paragraph::new(Text::from(content_text))
-                    .block(
-                        Block::default()
-                            .title(format!(
-                                "Change {}/{}",
-                                app.current_change_idx + 1,
-                                changes.len()
-                            ))
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(Color::Yellow)),
-                    )
-                    .alignment(Alignment::Left);
+                let change_block_widget = Block::default()
+                    .title(Span::styled(
+                        " Current Change ",
+                        Style::default().fg(FG_KEY),
+                    ))
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(BORDER_FOCUSED));
 
-                f.render_widget(change_block, rebase_chunks[0]);
+                let mut change_paragraph = Paragraph::new(Text::from(content_text))
+                    .block(change_block_widget);
+
+                match current_change.state {
+                    ChangeState::Accepted => {
+                        change_paragraph =
+                            change_paragraph.style(Style::default().bg(BG_ACCEPTED));
+                    }
+                    ChangeState::Rejected => {
+                        change_paragraph =
+                            change_paragraph.style(Style::default().bg(BG_REJECTED));
+                    }
+                    ChangeState::Unselected => {}
+                }
+
+                f.render_widget(change_paragraph, rebase_chunks[1]);
 
                 // Context section
-                let mut context_lines = Vec::new();
-                context_lines.push(Line::from(Span::styled(
-                    "Context:",
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                )));
-                context_lines.push(Line::from(""));
-
+                let mut context_lines = vec![Line::from("")];
                 for line in &current_change.context {
                     context_lines.push(Line::from(Span::styled(
-                        line,
-                        Style::default().fg(Color::Gray),
+                        format!("  {}", line),
+                        Style::default().fg(FG_DIM),
                     )));
                 }
 
-                // Add instructions
-                context_lines.push(Line::from(""));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'a' to accept this change",
-                    Style::default().fg(Color::Green),
-                )));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'x' to reject this change",
-                    Style::default().fg(Color::Red),
-                )));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'j'/'k' to navigate between changes",
-                    Style::default().fg(Color::White),
-                )));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'n'/'p' to navigate between files",
-                    Style::default().fg(Color::White),
-                )));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'c' to commit all accepted changes",
-                    Style::default().fg(Color::Yellow),
-                )));
-                context_lines.push(Line::from(Span::styled(
-                    "Press 'Esc' or 'q' to cancel and return to diff view",
-                    Style::default().fg(Color::White),
-                )));
-
                 let context_block = Paragraph::new(Text::from(context_lines)).block(
                     Block::default()
-                        .title("Context and Help")
-                        .borders(Borders::ALL),
+                        .title(Span::styled(
+                            " Context ",
+                            Style::default().fg(FG_DIM),
+                        ))
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(BORDER_DIM)),
                 );
-
-                f.render_widget(context_block, rebase_chunks[1]);
+                f.render_widget(context_block, rebase_chunks[2]);
             }
         } else {
-            // Show message if no changes for this file
-            let no_changes_text = Paragraph::new("No changes found for this file")
-                .style(Style::default().fg(Color::White))
-                .alignment(Alignment::Center);
-
-            f.render_widget(no_changes_text, inner_area);
+            let msg = Paragraph::new(Span::styled(
+                "No changes found for this file",
+                Style::default().fg(FG_DIM),
+            ))
+            .alignment(Alignment::Center);
+            f.render_widget(msg, inner_area);
         }
     }
 }
