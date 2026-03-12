@@ -169,39 +169,124 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
     file_changes
 }
 
-pub fn apply_changes(
-    file_path: &str,
-    changes: &[(usize, String, bool)],
-) -> Result<(), Box<dyn Error>> {
+#[derive(Clone)]
+pub enum ChangeOp {
+    /// Replace line at the given 1-indexed base position with new content
+    Replace(usize, String),
+    /// Delete line at the given 1-indexed base position
+    Delete(usize),
+    /// Insert content at the given 1-indexed base position.
+    /// `order` is the original head line number, used to keep multiple
+    /// insertions at the same base position in the correct order.
+    Insert {
+        base_pos: usize,
+        order: usize,
+        content: String,
+    },
+}
+
+impl ChangeOp {
+    fn line_num(&self) -> usize {
+        match self {
+            ChangeOp::Replace(n, _) | ChangeOp::Delete(n) => *n,
+            ChangeOp::Insert { base_pos, .. } => *base_pos,
+        }
+    }
+}
+
+pub fn apply_changes(file_path: &str, operations: &[ChangeOp]) -> Result<(), Box<dyn Error>> {
+    if operations.is_empty() {
+        return Ok(());
+    }
+
     let original_content = std::fs::read_to_string(file_path)?;
-    // Use owned strings instead of references
+    let has_trailing_newline = original_content.ends_with('\n');
     let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
 
-    // Sort changes by line number in descending order to avoid messing up line numbers
-    let mut sorted_changes = changes.to_vec();
-    sorted_changes.sort_by(|a, b| b.0.cmp(&a.0));
+    // Phase 1: Apply Delete and Replace operations (already in base coordinates).
+    // Process in descending line-number order so that removals at higher
+    // positions don't shift indices for lower positions.
+    let mut base_ops: Vec<&ChangeOp> = operations
+        .iter()
+        .filter(|op| matches!(op, ChangeOp::Replace(..) | ChangeOp::Delete(..)))
+        .collect();
+    base_ops.sort_by_key(|op| std::cmp::Reverse(op.line_num()));
 
-    // Apply changes
-    for (line_num, content, is_accepted) in sorted_changes {
-        if is_accepted {
-            // Convert from 1-indexed (display) to 0-indexed (internal)
-            let idx = line_num - 1;
-            if idx < lines.len() {
-                // Remove the +/- prefix if present
-                let clean_content = if content.starts_with('+') || content.starts_with('-') {
-                    content[1..].to_string()
-                } else {
-                    content.clone()
-                };
+    let mut deleted_positions: Vec<usize> = Vec::new();
 
-                // Now we can assign to our owned String
-                lines[idx] = clean_content.trim_start().to_string();
+    for op in &base_ops {
+        match op {
+            ChangeOp::Replace(line_num, content) => {
+                if *line_num == 0 {
+                    continue;
+                }
+                let idx = line_num - 1;
+                if idx < lines.len() {
+                    lines[idx] = content.clone();
+                }
             }
+            ChangeOp::Delete(line_num) => {
+                if *line_num == 0 {
+                    continue;
+                }
+                let idx = line_num - 1;
+                if idx < lines.len() {
+                    lines.remove(idx);
+                    deleted_positions.push(*line_num);
+                }
+            }
+            _ => {}
         }
     }
 
-    // Write back to file
-    std::fs::write(file_path, lines.join("\n"))?;
+    // Phase 2: Apply Insert operations, adjusting positions for prior deletions.
+    // Sort by (base_pos DESC, order DESC) so that multiple inserts at the
+    // same base position end up in the correct source order: the last one
+    // processed at a position pushes earlier ones down.
+    let mut insert_ops: Vec<&ChangeOp> = operations
+        .iter()
+        .filter(|op| matches!(op, ChangeOp::Insert { .. }))
+        .collect();
+    insert_ops.sort_by(|a, b| {
+        let pos_cmp = b.line_num().cmp(&a.line_num());
+        if pos_cmp != std::cmp::Ordering::Equal {
+            return pos_cmp;
+        }
+        // Tiebreak: higher order (head line number) processed first
+        let a_order = if let ChangeOp::Insert { order, .. } = a {
+            *order
+        } else {
+            0
+        };
+        let b_order = if let ChangeOp::Insert { order, .. } = b {
+            *order
+        } else {
+            0
+        };
+        b_order.cmp(&a_order)
+    });
+
+    for op in &insert_ops {
+        if let ChangeOp::Insert {
+            base_pos, content, ..
+        } = op
+        {
+            if *base_pos == 0 {
+                continue;
+            }
+            // Adjust for lines that were deleted at positions before this one
+            let deletes_before = deleted_positions.iter().filter(|&&d| d < *base_pos).count();
+            let adjusted = base_pos.saturating_sub(deletes_before);
+            let idx = adjusted.saturating_sub(1).min(lines.len());
+            lines.insert(idx, content.clone());
+        }
+    }
+
+    let mut result = lines.join("\n");
+    if has_trailing_newline {
+        result.push('\n');
+    }
+    std::fs::write(file_path, result)?;
 
     Ok(())
 }
@@ -213,7 +298,7 @@ pub fn check_rebase_needed() -> Result<Option<String>, Box<dyn Error>> {
         .output()?;
 
     if !status.status.success() {
-        return Ok(None); // Not in a git repository
+        return Ok(None);
     }
 
     // Get current branch name
@@ -222,84 +307,48 @@ pub fn check_rebase_needed() -> Result<Option<String>, Box<dyn Error>> {
         .output()?;
 
     if !branch_output.status.success() {
-        return Ok(None); // Not on a branch or other issue
+        return Ok(None);
     }
 
     let current_branch = String::from_utf8_lossy(&branch_output.stdout)
         .trim()
         .to_string();
 
-    // Check if branch has upstream
-    let upstream_check = Command::new("git")
+    // Check if branch has an upstream and get its name
+    let upstream_output = match Command::new("git")
         .args([
             "rev-parse",
             "--abbrev-ref",
-            format!("{}@{{u}}", current_branch).as_str(),
+            &format!("{}@{{u}}", current_branch),
         ])
-        .output();
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return Ok(None), // No upstream configured
+    };
 
-    // If there's no upstream, no need to rebase
-    if upstream_check.is_err() || !upstream_check?.status.success() {
-        return Ok(None);
-    }
+    let upstream_name = String::from_utf8_lossy(&upstream_output.stdout)
+        .trim()
+        .to_string();
 
-    // Check if local branch is behind upstream
+    // Check branch status relative to upstream
     let status_output = Command::new("git").args(["status", "-sb"]).output()?;
+    let status_text = String::from_utf8_lossy(&status_output.stdout).to_string();
 
-    let status_text = String::from_utf8_lossy(&status_output.stdout);
-
-    // Look for "[behind X]" in status output
-    if status_text.contains("[behind") {
-        let upstream = Command::new("git")
-            .args([
-                "rev-parse",
-                "--abbrev-ref",
-                format!("{}@{{u}}", current_branch).as_str(),
-            ])
-            .output()?;
-
-        let upstream_name = String::from_utf8_lossy(&upstream.stdout).trim().to_string();
-
+    // Check for diverged state (both ahead and behind)
+    if status_text.contains("ahead") && status_text.contains("behind") {
         return Ok(Some(format!(
-            "Your branch '{}' is behind '{}'. A rebase is recommended.",
+            "Your branch '{}' has diverged from '{}'.\nConsider rebasing to integrate changes cleanly.",
             current_branch, upstream_name
         )));
     }
 
-    // Check if there are local and remote changes that would conflict
-    let local_changes = Command::new("git")
-        .args(["rev-list", "HEAD", format!("^{}", current_branch).as_str()])
-        .output()?;
-
-    let remote_changes = Command::new("git")
-        .args([
-            "rev-list",
-            format!("{}@{{u}}", current_branch).as_str(),
-            format!("^{}", current_branch).as_str(),
-        ])
-        .output()?;
-
-    if local_changes.status.success()
-        && remote_changes.status.success()
-        && !String::from_utf8_lossy(&local_changes.stdout)
-            .trim()
-            .is_empty()
-        && !String::from_utf8_lossy(&remote_changes.stdout)
-            .trim()
-            .is_empty()
-    {
-        let upstream = Command::new("git")
-            .args([
-                "rev-parse",
-                "--abbrev-ref",
-                format!("{}@{{u}}", current_branch).as_str(),
-            ])
-            .output()?;
-
-        let upstream_name = String::from_utf8_lossy(&upstream.stdout).trim().to_string();
-
-        return Ok(Some(format!("Your branch '{}' has diverged from '{}'.\nConsider rebasing to integrate changes cleanly.",
-                              current_branch, upstream_name)));
+    // Check for behind-only state
+    if status_text.contains("[behind") {
+        return Ok(Some(format!(
+            "Your branch '{}' is behind '{}'. A rebase is recommended.",
+            current_branch, upstream_name
+        )));
     }
 
     Ok(None)

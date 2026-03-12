@@ -12,7 +12,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame, Terminal,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use std::sync::LazyLock;
 use std::{error::Error, io};
@@ -40,6 +40,8 @@ struct Change {
     state: ChangeState,
     is_base: bool,
     context: Vec<String>,
+    /// For unpaired additions: the computed base-file position to insert at.
+    base_insert_pos: Option<usize>,
 }
 
 struct App<'a> {
@@ -56,6 +58,8 @@ struct App<'a> {
     current_change_idx: usize,
     rebase_notification: Option<String>,
     show_rebase_modal: bool,
+    /// Transient status message shown in the help bar (cleared on next keypress)
+    status_message: Option<String>,
 }
 
 enum Pane {
@@ -162,6 +166,7 @@ pub fn run_app(
         current_change_idx: 0,
         rebase_notification: rebase_notification.clone(),
         show_rebase_modal: rebase_notification.is_some(),
+        status_message: None,
     };
 
     // Run the main loop
@@ -176,8 +181,14 @@ pub fn run_app(
     )?;
     terminal.show_cursor()?;
 
-    if let Err(err) = res {
-        println!("{:?}", err)
+    match res {
+        Ok(true) => {
+            println!("Rebase completed successfully. Please re-run giff to see updated changes.");
+        }
+        Err(err) => {
+            println!("{:?}", err);
+        }
+        _ => {}
     }
 
     Ok(())
@@ -230,20 +241,53 @@ fn prepare_rebase_changes(app: &mut App) {
                 }
             }
 
-            // Try to match lines - this is a simple approach
-            // For more sophisticated matching, you'd need a diff algorithm
-            for (base_num, base_line) in &base_map {
-                let _base_content = base_line.strip_prefix('-').unwrap_or(base_line);
+            // Pair deleted lines with nearby added lines (closest match first).
+            // Each head line can only be paired once.
+            let mut used_head_nums: HashSet<usize> = HashSet::new();
+            let mut sorted_base_nums: Vec<usize> = base_map.keys().copied().collect();
+            sorted_base_nums.sort();
 
-                // Try to find a matching added line with similar content
-                for (head_num, head_line) in &head_map {
-                    let _head_content = head_line.strip_prefix('+').unwrap_or(head_line);
+            for base_num in sorted_base_nums {
+                let mut best_head_num = None;
+                let mut best_distance = 5isize;
 
-                    // If line numbers are close and content is similar - pair them
-                    // This is a very simplistic approach and might need refinement
-                    if (*head_num as isize - *base_num as isize).abs() < 5 {
-                        paired_changes.insert(*base_num, *head_num);
-                        break;
+                for head_num in head_map.keys() {
+                    if used_head_nums.contains(head_num) {
+                        continue;
+                    }
+                    let distance = (*head_num as isize - base_num as isize).abs();
+                    if distance < best_distance {
+                        best_distance = distance;
+                        best_head_num = Some(*head_num);
+                    }
+                }
+
+                if let Some(head_num) = best_head_num {
+                    paired_changes.insert(base_num, head_num);
+                    used_head_nums.insert(head_num);
+                }
+            }
+
+            // Build head→base insertion position mapping by aligning
+            // context lines between the two sides of the diff.
+            let mut base_insert_positions: HashMap<usize, usize> = HashMap::new();
+            {
+                let mut bi = 0;
+                let mut last_base_pos = 0usize;
+
+                for (h_num, h_line) in head_lines {
+                    if h_line.starts_with('+') {
+                        // Addition: insert after the last aligned base position
+                        base_insert_positions.insert(*h_num, last_base_pos + 1);
+                    } else {
+                        // Context line: skip past any '-' lines in base
+                        while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                            bi += 1;
+                        }
+                        if bi < base_lines.len() {
+                            last_base_pos = base_lines[bi].0;
+                            bi += 1;
+                        }
                     }
                 }
             }
@@ -266,6 +310,7 @@ fn prepare_rebase_changes(app: &mut App) {
                         state: ChangeState::Unselected,
                         is_base: true,
                         context,
+                        base_insert_pos: None,
                     });
                 }
             }
@@ -274,6 +319,7 @@ fn prepare_rebase_changes(app: &mut App) {
             for (line_num, line) in head_lines {
                 if line.starts_with('+') && !paired_changes.values().any(|num| num == line_num) {
                     let context = get_context(head_lines, *line_num);
+                    let base_pos = base_insert_positions.get(line_num).copied();
                     changes.push(Change {
                         line_num: *line_num,
                         content: line.clone(),
@@ -281,6 +327,7 @@ fn prepare_rebase_changes(app: &mut App) {
                         state: ChangeState::Unselected,
                         is_base: false,
                         context,
+                        base_insert_pos: base_pos,
                     });
                 }
             }
@@ -295,7 +342,9 @@ fn prepare_rebase_changes(app: &mut App) {
     app.current_change_idx = 0;
 }
 
-fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()>
+/// Returns `Ok(true)` when the app exits after a successful rebase
+/// (so the caller can print a message), `Ok(false)` for normal exit.
+fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<bool>
 where
     std::io::Error: From<B::Error>,
 {
@@ -304,6 +353,9 @@ where
 
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
+                // Clear transient status message on any keypress
+                app.status_message = None;
+
                 // Handle rebase modal if shown
                 if app.show_rebase_modal {
                     match key.code {
@@ -320,17 +372,14 @@ where
                                     match diff::perform_rebase(&upstream) {
                                         Ok(success) => {
                                             if success {
-                                                // Rebase successful
+                                                // Rebase successful — exit so the user
+                                                // can re-run with fresh diff data.
                                                 app.show_rebase_modal = false;
-                                                app.rebase_notification = Some(
-                                                    "Rebase completed successfully!".to_string(),
-                                                );
-                                                // We'd update file_changes here, but it's immutable in your structure
-                                                // We'll need to switch back to diff mode
+                                                return Ok(true);
                                             } else {
                                                 app.rebase_notification = Some(
-                                                         "Rebase failed. There might be conflicts to resolve.".to_string()
-                                                     );
+                                                    "Rebase failed. There might be conflicts to resolve.".to_string()
+                                                );
                                             }
                                         }
                                         Err(e) => {
@@ -356,7 +405,7 @@ where
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         match app.app_mode {
-                            AppMode::Diff => return Ok(()),
+                            AppMode::Diff => return Ok(false),
                             AppMode::Rebase => {
                                 // Return to diff mode without applying changes
                                 app.app_mode = AppMode::Diff;
@@ -404,58 +453,67 @@ where
                     KeyCode::Char('c') => {
                         if let AppMode::Rebase = app.app_mode {
                             // Commit rebase changes
-                            let mut any_changes_applied = false;
+                            let mut any_applied = false;
+                            let mut errors = Vec::new();
 
                             for (file, changes) in &app.rebase_changes {
-                                let mut changes_to_apply = Vec::new();
+                                let mut operations = Vec::new();
 
                                 for change in changes {
-                                    if change.state == ChangeState::Accepted {
-                                        if change.is_base {
-                                            // For removed lines that were accepted, we want to apply
-                                            // the paired content (if available) or remove the line
-                                            if let Some(paired_content) = &change.paired_content {
-                                                // Apply the paired content
-                                                let clean_content = paired_content
-                                                    .strip_prefix('+')
-                                                    .unwrap_or(paired_content);
+                                    if change.state != ChangeState::Accepted {
+                                        continue;
+                                    }
 
-                                                changes_to_apply.push((
-                                                    change.line_num,
-                                                    clean_content.to_string(),
-                                                    true,
-                                                ));
-                                            } else {
-                                                // Just mark the line for removal
-                                                changes_to_apply.push((
-                                                    change.line_num,
-                                                    change.content.clone(),
-                                                    true,
-                                                ));
-                                            }
-                                        } else {
-                                            // For added lines, apply normally
-                                            changes_to_apply.push((
+                                    if change.is_base {
+                                        if let Some(paired_content) = &change.paired_content {
+                                            // Replace: swap old content with incoming content
+                                            let clean = paired_content
+                                                .strip_prefix('+')
+                                                .unwrap_or(paired_content);
+                                            operations.push(diff::ChangeOp::Replace(
                                                 change.line_num,
-                                                change.content.clone(),
-                                                true,
+                                                clean.to_string(),
                                             ));
+                                        } else {
+                                            // Delete: remove the line entirely
+                                            operations
+                                                .push(diff::ChangeOp::Delete(change.line_num));
                                         }
+                                    } else {
+                                        // Insert: use computed base position
+                                        let clean = change
+                                            .content
+                                            .strip_prefix('+')
+                                            .unwrap_or(&change.content);
+                                        let base_pos = change
+                                            .base_insert_pos
+                                            .unwrap_or(change.line_num);
+                                        operations.push(diff::ChangeOp::Insert {
+                                            base_pos,
+                                            order: change.line_num,
+                                            content: clean.to_string(),
+                                        });
                                     }
                                 }
 
-                                if !changes_to_apply.is_empty() {
-                                    any_changes_applied = true;
-                                    if let Err(e) = diff::apply_changes(file, &changes_to_apply) {
-                                        // Handle error (could add a status message to the UI)
-                                        eprintln!("Error applying changes to {}: {}", file, e);
+                                if !operations.is_empty() {
+                                    any_applied = true;
+                                    if let Err(e) = diff::apply_changes(file, &operations) {
+                                        errors.push(format!("{}: {}", file, e));
                                     }
                                 }
                             }
 
-                            // Show success message (this would be better with a status message in the UI)
-                            if any_changes_applied {
-                                // Could add a flash message here if the UI supported it
+                            // Surface feedback through the UI
+                            if !errors.is_empty() {
+                                app.status_message =
+                                    Some(format!("Error: {}", errors.join("; ")));
+                            } else if any_applied {
+                                app.status_message =
+                                    Some("Changes applied successfully!".to_string());
+                            } else {
+                                app.status_message =
+                                    Some("No accepted changes to apply.".to_string());
                             }
 
                             // Return to diff mode
@@ -1266,26 +1324,48 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
+    if r.width == 0 || r.height == 0 {
+        return r;
+    }
+
+    let height = height.min(r.height);
+    let width = width.min(r.width);
+
+    let vert_margin = 100u16.saturating_sub(height * 100 / r.height) / 2;
+    let horiz_margin = 100u16.saturating_sub(width * 100 / r.width) / 2;
+
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage((100 - height * 100 / r.height) / 2),
+            Constraint::Percentage(vert_margin),
             Constraint::Length(height),
-            Constraint::Percentage((100 - height * 100 / r.height) / 2),
+            Constraint::Percentage(vert_margin),
         ])
         .split(r);
 
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage((100 - width * 100 / r.width) / 2),
+            Constraint::Percentage(horiz_margin),
             Constraint::Length(width),
-            Constraint::Percentage((100 - width * 100 / r.width) / 2),
+            Constraint::Percentage(horiz_margin),
         ])
         .split(popup_layout[1])[1]
 }
 
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
+    // Show status message if present, otherwise show help text
+    if let Some(msg) = &app.status_message {
+        let is_error = msg.starts_with("Error");
+        let color = if is_error { Color::Red } else { Color::Green };
+        let status = Paragraph::new(msg.as_str())
+            .style(Style::default().fg(color).add_modifier(Modifier::BOLD))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(status, area);
+        return;
+    }
+
     let help_text = match app.app_mode {
         AppMode::Diff => "Esc/q: Quit | j/k: Navigate | Tab: Change focus | h/l: Switch panes | u: Toggle view | r: Enter rebase mode",
         AppMode::Rebase => "Esc/q: Cancel | j/k: Navigate changes | a: Accept change | x: Reject change | c: Commit changes",
