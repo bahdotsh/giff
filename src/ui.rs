@@ -512,6 +512,96 @@ where
                             }
                         }
                     },
+                    KeyCode::PageDown => match app.app_mode {
+                        AppMode::Diff => match app.focused_pane {
+                            Pane::FileList => {
+                                let page = terminal.size()?.height.saturating_sub(6) as usize;
+                                app.current_file_idx = (app.current_file_idx + page)
+                                    .min(app.file_names.len().saturating_sub(1));
+                            }
+                            Pane::DiffContent => {
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    let scroll =
+                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let page = terminal.size()?.height.saturating_sub(6);
+                                    app.scroll_positions
+                                        .insert(file.clone(), scroll.saturating_add(page));
+                                }
+                            }
+                        },
+                        AppMode::Rebase => {
+                            if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                if let Some(changes) = app.rebase_changes.get(file) {
+                                    if !changes.is_empty() {
+                                        let page =
+                                            terminal.size()?.height.saturating_sub(6) as usize;
+                                        app.current_change_idx = (app.current_change_idx + page)
+                                            .min(changes.len() - 1);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    KeyCode::PageUp => match app.app_mode {
+                        AppMode::Diff => match app.focused_pane {
+                            Pane::FileList => {
+                                let page = terminal.size()?.height.saturating_sub(6) as usize;
+                                app.current_file_idx =
+                                    app.current_file_idx.saturating_sub(page);
+                            }
+                            Pane::DiffContent => {
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    let scroll =
+                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let page = terminal.size()?.height.saturating_sub(6);
+                                    app.scroll_positions
+                                        .insert(file.clone(), scroll.saturating_sub(page));
+                                }
+                            }
+                        },
+                        AppMode::Rebase => {
+                            let page = terminal.size()?.height.saturating_sub(6) as usize;
+                            app.current_change_idx =
+                                app.current_change_idx.saturating_sub(page);
+                        }
+                    },
+                    KeyCode::Home => match app.app_mode {
+                        AppMode::Diff => match app.focused_pane {
+                            Pane::FileList => {
+                                app.current_file_idx = 0;
+                            }
+                            Pane::DiffContent => {
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    app.scroll_positions.insert(file.clone(), 0);
+                                }
+                            }
+                        },
+                        AppMode::Rebase => {
+                            app.current_change_idx = 0;
+                        }
+                    },
+                    KeyCode::End => match app.app_mode {
+                        AppMode::Diff => match app.focused_pane {
+                            Pane::FileList => {
+                                app.current_file_idx =
+                                    app.file_names.len().saturating_sub(1);
+                            }
+                            Pane::DiffContent => {
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    app.scroll_positions.insert(file.clone(), u16::MAX);
+                                }
+                            }
+                        },
+                        AppMode::Rebase => {
+                            if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                if let Some(changes) = app.rebase_changes.get(file) {
+                                    if !changes.is_empty() {
+                                        app.current_change_idx = changes.len() - 1;
+                                    }
+                                }
+                            }
+                        }
+                    },
                     KeyCode::Tab => {
                         // Toggle between file list and diff content (only in diff mode)
                         if let AppMode::Diff = app.app_mode {
