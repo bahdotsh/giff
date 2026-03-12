@@ -14,7 +14,11 @@ use ratatui::{
 };
 use std::collections::HashMap;
 use std::process::Command;
+use std::sync::LazyLock;
 use std::{error::Error, io};
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{self, ThemeSet};
+use syntect::parsing::SyntaxSet;
 
 enum AppMode {
     Diff,
@@ -62,6 +66,58 @@ enum Pane {
 enum ViewMode {
     SideBySide,
     Unified,
+}
+
+static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
+static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
+
+/// Convert a syntect color to a ratatui Color
+fn to_ratatui_color(c: highlighting::Color) -> Color {
+    Color::Rgb(c.r, c.g, c.b)
+}
+
+/// Highlight a single line of code using syntect, returning styled spans
+fn highlight_code(code: &str, highlighter: &mut HighlightLines) -> Vec<Span<'static>> {
+    match highlighter.highlight_line(code, &SYNTAX_SET) {
+        Ok(ranges) => ranges
+            .into_iter()
+            .map(|(style, text)| {
+                Span::styled(
+                    text.to_owned(),
+                    Style::default().fg(to_ratatui_color(style.foreground)),
+                )
+            })
+            .collect(),
+        Err(_) => vec![Span::raw(code.to_owned())],
+    }
+}
+
+/// Convert line changes to syntax highlighted spans using syntect
+fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<Line<'static>> {
+    let syntax = SYNTAX_SET
+        .find_syntax_for_file(filename)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+    let theme = &THEME_SET.themes["base16-ocean.dark"];
+    let mut highlighter = HighlightLines::new(syntax, theme);
+
+    lines
+        .iter()
+        .map(|(line_num, line)| {
+            let (prefix, color, code) = if let Some(rest) = line.strip_prefix('-') {
+                (format!("{:4} -", line_num), Color::Red, rest)
+            } else if let Some(rest) = line.strip_prefix('+') {
+                (format!("{:4} +", line_num), Color::Green, rest)
+            } else {
+                (format!("{:4} ", line_num), Color::White, line.as_str())
+            };
+
+            let mut spans = vec![Span::styled(prefix, Style::default().fg(color))];
+            spans.extend(highlight_code(code, &mut highlighter));
+            Line::from(spans)
+        })
+        .collect()
 }
 
 pub fn run_app(
@@ -719,26 +775,10 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-
-    let content = Text::from(
-        base_lines
-            .iter()
-            .map(|(line_num, line)| {
-                let color = if line.starts_with('-') {
-                    Color::Red
-                } else if line.starts_with('+') {
-                    Color::Green
-                } else {
-                    Color::White
-                };
-
-                Line::from(Span::styled(
-                    format!("{:4} {}", line_num, line),
-                    Style::default().fg(color),
-                ))
-            })
-            .collect::<Vec<Line>>(),
-    );
+    
+    // Use syntax highlighting
+    let highlighted_content = highlight_line_changes(base_lines, current_file);
+    let content = Text::from(highlighted_content);
 
     let base_paragraph = Paragraph::new(content)
         .block(
@@ -761,6 +801,7 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(base_paragraph, area);
 }
+
 fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     let current_file = if let Some(file) = app.file_names.get(app.current_file_idx) {
         file
@@ -775,26 +816,10 @@ fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-
-    let content = Text::from(
-        head_lines
-            .iter()
-            .map(|(line_num, line)| {
-                let color = if line.starts_with('-') {
-                    Color::Red
-                } else if line.starts_with('+') {
-                    Color::Green
-                } else {
-                    Color::White
-                };
-
-                Line::from(Span::styled(
-                    format!("{:4} {}", line_num, line),
-                    Style::default().fg(color),
-                ))
-            })
-            .collect::<Vec<Line>>(),
-    );
+    
+    // Use syntax highlighting
+    let highlighted_content = highlight_line_changes(head_lines, current_file);
+    let content = Text::from(highlighted_content);
 
     let head_paragraph = Paragraph::new(content)
         .block(
@@ -808,7 +833,7 @@ fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     let head_paragraph = match app.focused_pane {
         Pane::DiffContent => head_paragraph.block(
             Block::default()
-                .title(format!("HEAD ({})", current_file))
+                .title(format!("{} ({})", app.right_label, current_file))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow)),
         ),
@@ -833,8 +858,8 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
 
     let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
 
-    // Create unified diff by interleaving lines
-    let mut unified_content = Vec::new();
+    // Create a vector to store the unified lines for syntax highlighting
+    let mut unified_lines: Vec<(usize, String)> = Vec::new();
 
     // Collect all line numbers from both sides
     let mut all_lines: Vec<(usize, bool)> = Vec::new(); // (line_number, is_head)
@@ -847,7 +872,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
 
     // Sort by line number
     all_lines.sort_by_key(|(num, _)| *num);
-
+    
     // Process lines
     let mut processed_lines = Vec::new();
     for (num, is_head) in all_lines {
@@ -855,14 +880,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
             // Find this line in head_lines
             if let Some((_, line)) = head_lines.iter().find(|(line_num, _)| *line_num == num) {
                 if !line.starts_with('-') && !processed_lines.contains(&num) {
-                    unified_content.push(Line::from(Span::styled(
-                        format!("{:4} {}", num, line),
-                        Style::default().fg(if line.starts_with('+') {
-                            Color::Green
-                        } else {
-                            Color::White
-                        }),
-                    )));
+                    unified_lines.push((num, line.clone()));
                     processed_lines.push(num);
                 }
             }
@@ -870,25 +888,19 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
             // Find this line in base_lines
             if let Some((_, line)) = base_lines.iter().find(|(line_num, _)| *line_num == num) {
                 if !line.starts_with('+') && !processed_lines.contains(&num) {
-                    unified_content.push(Line::from(Span::styled(
-                        format!("{:4} {}", num, line),
-                        Style::default().fg(if line.starts_with('-') {
-                            Color::Red
-                        } else {
-                            Color::White
-                        }),
-                    )));
+                    unified_lines.push((num, line.clone()));
                     processed_lines.push(num);
                 }
             }
         }
     }
-
-    // Removed reference to undefined variable 'content'
-    // Fixed by directly using the unified_content in the Paragraph creation
+    
+    // Apply syntax highlighting to unified diff
+    let highlighted_content = highlight_line_changes(&unified_lines, current_file);
+    let content = Text::from(highlighted_content);
 
     // Use different style if DiffContent is focused
-    let unified_paragraph = Paragraph::new(Text::from(unified_content))
+    let unified_paragraph = Paragraph::new(content)
         .block(
             Block::default()
                 .title(format!(
@@ -901,6 +913,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(unified_paragraph, area);
 }
+
 fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
     // First, clear the background by rendering a filled block
     let clear_block = Block::default()

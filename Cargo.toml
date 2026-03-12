@@ -16,6 +16,7 @@ clap = { version = "4.5.13", features = ["derive"] }
 crossterm = "0.28.1"
 ratatui = { version = "0.27.0", features = ["all-widgets"] }
 regex = "1.10.6"
+syntect = { version = "5.2.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-onig"] }
 
 [profile.release]
 codegen-units = 1
