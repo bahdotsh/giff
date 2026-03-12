@@ -295,7 +295,10 @@ fn prepare_rebase_changes(app: &mut App) {
     app.current_change_idx = 0;
 }
 
-fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
+fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()>
+where
+    std::io::Error: From<B::Error>,
+{
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
@@ -623,7 +626,7 @@ fn run_ui<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    let size = f.size();
+    let size = f.area();
 
     // Create main layout with 3 parts: header, content, footer
     let main_chunks = Layout::default()
@@ -775,7 +778,7 @@ fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-    
+
     // Use syntax highlighting
     let highlighted_content = highlight_line_changes(base_lines, current_file);
     let content = Text::from(highlighted_content);
@@ -816,7 +819,7 @@ fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let scroll = app.scroll_positions.get(current_file).unwrap_or(&0);
-    
+
     // Use syntax highlighting
     let highlighted_content = highlight_line_changes(head_lines, current_file);
     let content = Text::from(highlighted_content);
@@ -872,7 +875,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
 
     // Sort by line number
     all_lines.sort_by_key(|(num, _)| *num);
-    
+
     // Process lines
     let mut processed_lines = Vec::new();
     for (num, is_head) in all_lines {
@@ -894,7 +897,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
             }
         }
     }
-    
+
     // Apply syntax highlighting to unified diff
     let highlighted_content = highlight_line_changes(&unified_lines, current_file);
     let content = Text::from(highlighted_content);
