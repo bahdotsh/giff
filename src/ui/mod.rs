@@ -17,11 +17,27 @@ use std::{error::Error, io};
 use event_loop::run_ui;
 use types::*;
 
+/// Restore the terminal to its normal state. Best-effort: errors are ignored
+/// because this is typically called during cleanup or panic recovery.
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+}
+
 pub fn run_app(
     file_changes: FileChanges,
     left_label: &str,
     right_label: &str,
 ) -> Result<(), Box<dyn Error>> {
+    // Install a panic hook that restores the terminal before printing the
+    // panic message. Without this, a panic leaves the terminal in raw mode
+    // with the alternate screen still active, making it unusable.
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        original_hook(info);
+    }));
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -30,15 +46,11 @@ pub fn run_app(
     let mut terminal = Terminal::new(backend)?;
 
     // Create app state
-    let file_names: Vec<String> = file_changes.keys().cloned().collect();
-    let file_names_sorted = {
-        let mut names = file_names.clone();
-        names.sort();
-        names
-    };
+    let mut file_names: Vec<String> = file_changes.keys().cloned().collect();
+    file_names.sort();
 
     let mut scroll_positions = HashMap::new();
-    for name in &file_names_sorted {
+    for name in &file_names {
         scroll_positions.insert(name.clone(), 0);
     }
 
@@ -50,7 +62,7 @@ pub fn run_app(
         left_label,
         right_label,
         current_file_idx: 0,
-        file_names: file_names_sorted,
+        file_names,
         scroll_positions,
         focused_pane: Pane::FileList,
         view_mode: ViewMode::SideBySide,
@@ -66,12 +78,7 @@ pub fn run_app(
     let res = run_ui(&mut terminal, app);
 
     // Restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    restore_terminal();
     terminal.show_cursor()?;
 
     match res {

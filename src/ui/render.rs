@@ -1,6 +1,6 @@
 use ratatui::{
     prelude::*,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span, Text},
     widgets::{
         Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Scrollbar,
@@ -9,22 +9,11 @@ use ratatui::{
     Frame,
 };
 
+use std::collections::{HashMap, HashSet};
+
 use super::rebase::render_rebase_ui;
 use super::syntax::highlight_line_changes;
 use super::types::*;
-
-// ── Color Palette ──────────────────────────────────────────────────────────
-const ACCENT: Color = Color::Rgb(130, 170, 255);
-const BORDER_FOCUSED: Color = Color::Rgb(130, 170, 255);
-const BORDER_DIM: Color = Color::Rgb(55, 58, 65);
-const FG_DIM: Color = Color::Rgb(100, 105, 115);
-const FG_NORMAL: Color = Color::Rgb(190, 195, 205);
-const FG_BRIGHT: Color = Color::Rgb(230, 233, 240);
-const BG_HEADER: Color = Color::Rgb(25, 28, 36);
-const BG_SELECTION: Color = Color::Rgb(35, 48, 72);
-const FG_ADDED: Color = Color::Rgb(80, 200, 100);
-const FG_REMOVED: Color = Color::Rgb(225, 85, 85);
-const FG_KEY: Color = Color::Rgb(220, 185, 100);
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let size = f.area();
@@ -346,8 +335,12 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
     let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
     let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
-    // Build unified lines
+    // Build unified lines using hash maps for O(n) lookups
     let mut unified_lines: Vec<(usize, String)> = Vec::new();
+
+    let base_map: HashMap<usize, &String> = base_lines.iter().map(|(n, l)| (*n, l)).collect();
+    let head_map: HashMap<usize, &String> = head_lines.iter().map(|(n, l)| (*n, l)).collect();
+
     let mut all_lines: Vec<(usize, bool)> = Vec::new();
     for (num, _) in base_lines {
         all_lines.push((*num, false));
@@ -357,19 +350,17 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
     }
     all_lines.sort_by_key(|(num, _)| *num);
 
-    let mut processed_lines = Vec::new();
-    for (num, is_head) in all_lines {
-        if is_head {
-            if let Some((_, line)) = head_lines.iter().find(|(line_num, _)| *line_num == num) {
-                if !line.starts_with('-') && !processed_lines.contains(&num) {
-                    unified_lines.push((num, line.clone()));
-                    processed_lines.push(num);
+    let mut processed_lines = HashSet::new();
+    for (num, is_head) in &all_lines {
+        if *is_head {
+            if let Some(line) = head_map.get(num) {
+                if !line.starts_with('-') && processed_lines.insert(*num) {
+                    unified_lines.push((*num, (*line).clone()));
                 }
             }
-        } else if let Some((_, line)) = base_lines.iter().find(|(line_num, _)| *line_num == num) {
-            if !line.starts_with('+') && !processed_lines.contains(&num) {
-                unified_lines.push((num, line.clone()));
-                processed_lines.push(num);
+        } else if let Some(line) = base_map.get(num) {
+            if !line.starts_with('+') && processed_lines.insert(*num) {
+                unified_lines.push((*num, (*line).clone()));
             }
         }
     }

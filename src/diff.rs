@@ -2,6 +2,14 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::process::Command;
+use std::sync::LazyLock;
+
+static DIFF_FILE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap());
+static HUNK_HEADER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^@@ -(\d+),?\d* \+(\d+),?\d* @@").unwrap());
+static ANSI_ESCAPE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\x1b\[.*?m").unwrap());
 
 pub type LineChange = (usize, String);
 pub type FileChanges = HashMap<String, (Vec<LineChange>, Vec<LineChange>)>;
@@ -97,10 +105,6 @@ fn extract_right_label(args: &str) -> String {
 }
 
 fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
-    let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$")?;
-    let hunk_header_regex = Regex::new(r"^@@ -(\d+),\d+ \+(\d+),\d+ @@")?;
-    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m")?;
-
     let mut file_changes = HashMap::new();
     let mut current_file = String::new();
     let mut base_lines = Vec::new();
@@ -109,10 +113,10 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
     let mut head_line_number = 1;
 
     for line in diff_output.lines() {
-        let trimmed_line = ansi_escape_regex.replace_all(line.trim(), "");
+        let trimmed_line = ANSI_ESCAPE_RE.replace_all(line.trim(), "");
 
         // Handle file header
-        if let Some(caps) = diff_file_regex.captures(trimmed_line.as_ref()) {
+        if let Some(caps) = DIFF_FILE_RE.captures(trimmed_line.as_ref()) {
             if !current_file.is_empty() {
                 file_changes.insert(
                     current_file.clone(),
@@ -133,7 +137,7 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
         }
 
         // Handle hunk header
-        if let Some(caps) = hunk_header_regex.captures(trimmed_line.as_ref()) {
+        if let Some(caps) = HUNK_HEADER_RE.captures(trimmed_line.as_ref()) {
             base_line_number = caps
                 .get(1)
                 .and_then(|m| m.as_str().parse::<usize>().ok())

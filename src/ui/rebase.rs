@@ -1,6 +1,6 @@
 use ratatui::{
     prelude::*,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
@@ -10,18 +10,6 @@ use std::collections::{HashMap, HashSet};
 use super::render::render_file_list;
 use super::types::*;
 
-// Colors (matching render.rs palette)
-const ACCENT: Color = Color::Rgb(130, 170, 255);
-const BORDER_FOCUSED: Color = Color::Rgb(130, 170, 255);
-const BORDER_DIM: Color = Color::Rgb(55, 58, 65);
-const FG_DIM: Color = Color::Rgb(100, 105, 115);
-const FG_BRIGHT: Color = Color::Rgb(230, 233, 240);
-const FG_ADDED: Color = Color::Rgb(80, 200, 100);
-const FG_REMOVED: Color = Color::Rgb(225, 85, 85);
-const FG_KEY: Color = Color::Rgb(220, 185, 100);
-const BG_ACCEPTED: Color = Color::Rgb(15, 40, 15);
-const BG_REJECTED: Color = Color::Rgb(45, 15, 15);
-
 pub fn prepare_rebase_changes(app: &mut App) {
     app.rebase_changes.clear();
 
@@ -29,27 +17,29 @@ pub fn prepare_rebase_changes(app: &mut App) {
         if let Some((base_lines, head_lines)) = app.file_changes.get(file_name) {
             let mut changes = Vec::new();
 
-            // Helper function to extract context (3 lines before and after)
-            let get_context = |lines: &[(usize, String)], line_num: usize| -> Vec<String> {
-                let mut context = Vec::new();
-                let start = if line_num > 3 { line_num - 3 } else { 1 };
+            // Build a lookup map for O(1) context line access
+            let base_line_map: HashMap<usize, &String> =
+                base_lines.iter().map(|(n, l)| (*n, l)).collect();
+            let head_line_map: HashMap<usize, &String> =
+                head_lines.iter().map(|(n, l)| (*n, l)).collect();
 
-                // Context lines before the change
-                for i in start..line_num {
-                    if let Some((_, line)) = lines.iter().find(|(num, _)| *num == i) {
-                        context.push(format!("{}: {}", i, line));
+            let get_context =
+                |line_map: &HashMap<usize, &String>, line_num: usize| -> Vec<String> {
+                    let mut context = Vec::new();
+                    let start = if line_num > 3 { line_num - 3 } else { 1 };
+
+                    for i in start..line_num {
+                        if let Some(line) = line_map.get(&i) {
+                            context.push(format!("{}: {}", i, line));
+                        }
                     }
-                }
-
-                // Context lines after the change
-                for i in line_num + 1..=line_num + 3 {
-                    if let Some((_, line)) = lines.iter().find(|(num, _)| *num == i) {
-                        context.push(format!("{}: {}", i, line));
+                    for i in line_num + 1..=line_num + 3 {
+                        if let Some(line) = line_map.get(&i) {
+                            context.push(format!("{}: {}", i, line));
+                        }
                     }
-                }
-
-                context
-            };
+                    context
+                };
 
             // First, find corresponding deleted/added lines to pair them
             let mut paired_changes = HashMap::new();
@@ -123,7 +113,7 @@ pub fn prepare_rebase_changes(app: &mut App) {
             // Add removed lines from base with their paired added lines
             for (line_num, line) in base_lines {
                 if line.starts_with('-') {
-                    let context = get_context(base_lines, *line_num);
+                    let context = get_context(&base_line_map, *line_num);
 
                     // Check if this line has a paired addition
                     let paired_head_num = paired_changes.get(line_num);
@@ -145,8 +135,8 @@ pub fn prepare_rebase_changes(app: &mut App) {
 
             // Add added lines from head that weren't paired
             for (line_num, line) in head_lines {
-                if line.starts_with('+') && !paired_changes.values().any(|num| num == line_num) {
-                    let context = get_context(head_lines, *line_num);
+                if line.starts_with('+') && !used_head_nums.contains(line_num) {
+                    let context = get_context(&head_line_map, *line_num);
                     let base_pos = base_insert_positions.get(line_num).copied();
                     changes.push(Change {
                         line_num: *line_num,
