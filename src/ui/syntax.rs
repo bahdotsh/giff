@@ -38,7 +38,18 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
         .ok()
         .flatten()
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
-    let theme = &THEME_SET.themes["base16-ocean.dark"];
+    let theme = match THEME_SET.themes.get("base16-ocean.dark") {
+        Some(t) => t,
+        None => match THEME_SET.themes.values().next() {
+            Some(t) => t,
+            None => {
+                return lines
+                    .iter()
+                    .map(|(num, line)| Line::from(Span::raw(format!("{:4}  {}", num, line))))
+                    .collect()
+            }
+        },
+    };
     let mut highlighter = HighlightLines::new(syntax, theme);
 
     lines

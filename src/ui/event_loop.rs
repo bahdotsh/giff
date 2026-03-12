@@ -151,9 +151,8 @@ where
                                             .content
                                             .strip_prefix('+')
                                             .unwrap_or(&change.content);
-                                        let base_pos = change
-                                            .base_insert_pos
-                                            .unwrap_or(change.line_num);
+                                        let base_pos =
+                                            change.base_insert_pos.unwrap_or(change.line_num);
                                         operations.push(diff::ChangeOp::Insert {
                                             base_pos,
                                             order: change.line_num,
@@ -172,8 +171,7 @@ where
 
                             // Surface feedback through the UI
                             if !errors.is_empty() {
-                                app.status_message =
-                                    Some(format!("Error: {}", errors.join("; ")));
+                                app.status_message = Some(format!("Error: {}", errors.join("; ")));
                             } else if any_applied {
                                 app.status_message =
                                     Some("Changes applied successfully!".to_string());
@@ -189,14 +187,13 @@ where
                     KeyCode::Char('j') | KeyCode::Down => match app.app_mode {
                         AppMode::Diff => match app.focused_pane {
                             Pane::FileList => {
-                                if app.current_file_idx < app.file_names.len() - 1 {
+                                if app.current_file_idx + 1 < app.file_names.len() {
                                     app.current_file_idx += 1;
                                 }
                             }
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
-                                    let scroll =
-                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
                                     app.scroll_positions.insert(file.clone(), scroll + 1);
                                 }
                             }
@@ -222,8 +219,7 @@ where
                             }
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
-                                    let scroll =
-                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
                                     if scroll > 0 {
                                         app.scroll_positions.insert(file.clone(), scroll - 1);
                                     }
@@ -245,8 +241,7 @@ where
                             }
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
-                                    let scroll =
-                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
                                     let page = terminal.size()?.height.saturating_sub(6);
                                     app.scroll_positions
                                         .insert(file.clone(), scroll.saturating_add(page));
@@ -259,8 +254,8 @@ where
                                     if !changes.is_empty() {
                                         let page =
                                             terminal.size()?.height.saturating_sub(6) as usize;
-                                        app.current_change_idx = (app.current_change_idx + page)
-                                            .min(changes.len() - 1);
+                                        app.current_change_idx =
+                                            (app.current_change_idx + page).min(changes.len() - 1);
                                     }
                                 }
                             }
@@ -270,13 +265,11 @@ where
                         AppMode::Diff => match app.focused_pane {
                             Pane::FileList => {
                                 let page = terminal.size()?.height.saturating_sub(6) as usize;
-                                app.current_file_idx =
-                                    app.current_file_idx.saturating_sub(page);
+                                app.current_file_idx = app.current_file_idx.saturating_sub(page);
                             }
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
-                                    let scroll =
-                                        *app.scroll_positions.get(file).unwrap_or(&0);
+                                    let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
                                     let page = terminal.size()?.height.saturating_sub(6);
                                     app.scroll_positions
                                         .insert(file.clone(), scroll.saturating_sub(page));
@@ -285,8 +278,7 @@ where
                         },
                         AppMode::Rebase => {
                             let page = terminal.size()?.height.saturating_sub(6) as usize;
-                            app.current_change_idx =
-                                app.current_change_idx.saturating_sub(page);
+                            app.current_change_idx = app.current_change_idx.saturating_sub(page);
                         }
                     },
                     KeyCode::Home => match app.app_mode {
@@ -307,8 +299,7 @@ where
                     KeyCode::End => match app.app_mode {
                         AppMode::Diff => match app.focused_pane {
                             Pane::FileList => {
-                                app.current_file_idx =
-                                    app.file_names.len().saturating_sub(1);
+                                app.current_file_idx = app.file_names.len().saturating_sub(1);
                             }
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
@@ -361,7 +352,7 @@ where
                             let mut found = false;
 
                             // Look for the next file with changes
-                            while next_idx < app.file_names.len() - 1 {
+                            while next_idx + 1 < app.file_names.len() {
                                 next_idx += 1;
                                 if let Some(changes) =
                                     app.rebase_changes.get(&app.file_names[next_idx])

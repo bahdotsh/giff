@@ -15,14 +15,14 @@ pub fn get_changes_with_args(args: &str) -> Result<(FileChanges, String, String)
     let left_label = extract_left_label(args);
     let right_label = extract_right_label(args);
 
-    Ok((parse_diff_output(&diff_output), left_label, right_label))
+    Ok((parse_diff_output(&diff_output)?, left_label, right_label))
 }
 
 // Compare uncommitted changes (git diff)
 pub fn get_uncommitted_changes() -> Result<(FileChanges, String, String), Box<dyn Error>> {
     let diff_output = get_diff_output_with_args(&[])?;
     Ok((
-        parse_diff_output(&diff_output),
+        parse_diff_output(&diff_output)?,
         "HEAD".to_string(),
         "Working Tree".to_string(),
     ))
@@ -34,7 +34,7 @@ pub fn get_changes_to_ref(
 ) -> Result<(FileChanges, String, String), Box<dyn Error>> {
     let diff_output = get_diff_output_with_args(&[reference])?;
     Ok((
-        parse_diff_output(&diff_output),
+        parse_diff_output(&diff_output)?,
         reference.to_string(),
         "Working Tree".to_string(),
     ))
@@ -47,7 +47,7 @@ pub fn get_changes_between(
 ) -> Result<(FileChanges, String, String), Box<dyn Error>> {
     let diff_output = get_diff_output_with_args(&[&format!("{}..{}", from, to)])?;
     Ok((
-        parse_diff_output(&diff_output),
+        parse_diff_output(&diff_output)?,
         from.to_string(),
         to.to_string(),
     ))
@@ -96,10 +96,10 @@ fn extract_right_label(args: &str) -> String {
     "Target".to_string()
 }
 
-fn parse_diff_output(diff_output: &str) -> FileChanges {
-    let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap();
-    let hunk_header_regex = Regex::new(r"^@@ -(\d+),\d+ \+(\d+),\d+ @@").unwrap();
-    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m").unwrap();
+fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
+    let diff_file_regex = Regex::new(r"^diff --git a/(.+) b/(.+)$")?;
+    let hunk_header_regex = Regex::new(r"^@@ -(\d+),\d+ \+(\d+),\d+ @@")?;
+    let ansi_escape_regex = Regex::new(r"\x1b\[.*?m")?;
 
     let mut file_changes = HashMap::new();
     let mut current_file = String::new();
@@ -123,7 +123,10 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
             }
 
             // Use second capture group as file path in most cases (the "b/" file)
-            current_file = caps.get(2).unwrap().as_str().to_string();
+            current_file = match caps.get(2) {
+                Some(m) => m.as_str().to_string(),
+                None => continue,
+            };
             base_line_number = 1;
             head_line_number = 1;
             continue;
@@ -131,8 +134,14 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
 
         // Handle hunk header
         if let Some(caps) = hunk_header_regex.captures(trimmed_line.as_ref()) {
-            base_line_number = caps.get(1).unwrap().as_str().parse::<usize>().unwrap();
-            head_line_number = caps.get(2).unwrap().as_str().parse::<usize>().unwrap();
+            base_line_number = caps
+                .get(1)
+                .and_then(|m| m.as_str().parse::<usize>().ok())
+                .unwrap_or(1);
+            head_line_number = caps
+                .get(2)
+                .and_then(|m| m.as_str().parse::<usize>().ok())
+                .unwrap_or(1);
             continue;
         }
 
@@ -166,7 +175,7 @@ fn parse_diff_output(diff_output: &str) -> FileChanges {
         file_changes.insert(current_file, (base_lines, head_lines));
     }
 
-    file_changes
+    Ok(file_changes)
 }
 
 #[derive(Clone)]

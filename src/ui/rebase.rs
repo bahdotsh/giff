@@ -178,9 +178,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
     render_file_list(f, app, content_chunks[0]);
 
     // Render rebase content area
-    if !app.file_names.is_empty() {
-        let current_file = &app.file_names[app.current_file_idx];
-
+    if let Some(current_file) = app.file_names.get(app.current_file_idx) {
         // Create a clean background for the rebase area
         let rebase_bg = Block::default()
             .style(Style::default().bg(Color::Black))
