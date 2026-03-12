@@ -472,7 +472,7 @@ where
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
                                     let scroll =
-                                        app.scroll_positions.get(file).unwrap_or(&0).clone();
+                                        *app.scroll_positions.get(file).unwrap_or(&0);
                                     app.scroll_positions.insert(file.clone(), scroll + 1);
                                 }
                             }
@@ -499,7 +499,7 @@ where
                             Pane::DiffContent => {
                                 if let Some(file) = app.file_names.get(app.current_file_idx) {
                                     let scroll =
-                                        app.scroll_positions.get(file).unwrap_or(&0).clone();
+                                        *app.scroll_positions.get(file).unwrap_or(&0);
                                     if scroll > 0 {
                                         app.scroll_positions.insert(file.clone(), scroll - 1);
                                     }
