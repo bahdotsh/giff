@@ -1,5 +1,5 @@
 use crate::diff;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseEventKind};
 use ratatui::{prelude::*, Terminal};
 use std::io;
 use std::process::Command;
@@ -17,8 +17,8 @@ where
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
+        match event::read()? {
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
                 // Clear transient status message on any keypress
                 app.status_message = None;
 
@@ -426,6 +426,67 @@ where
                     _ => {}
                 }
             }
+            Event::Mouse(mouse) => {
+                if app.show_rebase_modal {
+                    continue;
+                }
+                let size = terminal.size()?;
+                let scroll_amount: i16 = 3;
+                match mouse.kind {
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                        if mouse.row == 0 || mouse.row >= size.height.saturating_sub(1) {
+                            continue;
+                        }
+                        let delta = if matches!(mouse.kind, MouseEventKind::ScrollDown) {
+                            scroll_amount
+                        } else {
+                            -scroll_amount
+                        };
+                        match app.app_mode {
+                            AppMode::Diff => {
+                                let file_list_width = size.width / 5;
+                                if mouse.column < file_list_width {
+                                    if !app.file_names.is_empty() {
+                                        if delta > 0 {
+                                            app.current_file_idx = (app.current_file_idx + delta as usize)
+                                                .min(app.file_names.len() - 1);
+                                        } else {
+                                            app.current_file_idx = app.current_file_idx
+                                                .saturating_sub((-delta) as usize);
+                                        }
+                                    }
+                                } else if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
+                                    if delta > 0 {
+                                        app.scroll_positions
+                                            .insert(file.clone(), scroll.saturating_add(delta as u16));
+                                    } else {
+                                        app.scroll_positions
+                                            .insert(file.clone(), scroll.saturating_sub((-delta) as u16));
+                                    }
+                                }
+                            }
+                            AppMode::Rebase => {
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    if let Some(changes) = app.rebase_changes.get(file) {
+                                        if !changes.is_empty() {
+                                            if delta > 0 {
+                                                app.current_change_idx = (app.current_change_idx + delta as usize)
+                                                    .min(changes.len() - 1);
+                                            } else {
+                                                app.current_change_idx = app.current_change_idx
+                                                    .saturating_sub((-delta) as usize);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
         }
     }
 }
