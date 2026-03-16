@@ -70,7 +70,12 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
             None => {
                 return lines
                     .iter()
-                    .map(|(num, line)| Line::from(Span::raw(format!("{:4}   {}", num, line))))
+                    .map(|(num, line)| {
+                        if *num == 0 {
+                            return Line::from(Span::raw(""));
+                        }
+                        Line::from(Span::raw(format!("{:4}   {}", num, line)))
+                    })
                     .collect()
             }
         },
@@ -80,6 +85,10 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
     lines
         .iter()
         .map(|(line_num, line)| {
+            // Gap/placeholder line for side-by-side alignment
+            if *line_num == 0 {
+                return Line::from(Span::raw(""));
+            }
             if let Some(rest) = line.strip_prefix('-') {
                 let mut spans = vec![
                     Span::styled(

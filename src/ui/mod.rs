@@ -1,8 +1,11 @@
 mod event_loop;
 mod rebase;
-mod render;
+pub(crate) mod render;
 mod syntax;
 mod types;
+
+#[cfg(test)]
+mod tests;
 
 use crate::diff::{self, FileChanges};
 use crossterm::{

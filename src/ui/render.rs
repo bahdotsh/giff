@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use std::collections::{HashMap, HashSet};
+use crate::diff::LineChange;
 
 use super::rebase::render_rebase_ui;
 use super::syntax::highlight_line_changes;
@@ -48,8 +48,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
                 render_file_list(f, app, content_chunks[0]);
                 if !app.file_names.is_empty() {
-                    render_base_content(f, app, content_chunks[1]);
-                    render_head_content(f, app, content_chunks[2]);
+                    render_side_by_side(f, app, content_chunks[1], content_chunks[2]);
                 }
             }
             ViewMode::Unified => {
@@ -274,50 +273,204 @@ fn render_diff_pane(
     }
 }
 
-fn render_base_content(f: &mut Frame, app: &App, area: Rect) {
+/// Produce aligned line vectors for side-by-side display.
+/// Gap lines are represented as `(0, String::new())`.
+pub(super) fn align_lines(
+    base_lines: &[LineChange],
+    head_lines: &[LineChange],
+) -> (Vec<LineChange>, Vec<LineChange>) {
+    let mut aligned_base = Vec::new();
+    let mut aligned_head = Vec::new();
+    let mut bi = 0;
+    let mut hi = 0;
+
+    while bi < base_lines.len() || hi < head_lines.len() {
+        let b_is_change = bi < base_lines.len() && base_lines[bi].1.starts_with('-');
+        let h_is_change = hi < head_lines.len() && head_lines[hi].1.starts_with('+');
+
+        if b_is_change || h_is_change {
+            // Collect consecutive change lines from each side
+            let mut b_chunk = Vec::new();
+            let mut h_chunk = Vec::new();
+
+            while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                b_chunk.push(base_lines[bi].clone());
+                bi += 1;
+            }
+            while hi < head_lines.len() && head_lines[hi].1.starts_with('+') {
+                h_chunk.push(head_lines[hi].clone());
+                hi += 1;
+            }
+
+            // Pair change lines, padding the shorter side with gaps
+            let max_len = b_chunk.len().max(h_chunk.len());
+            for i in 0..max_len {
+                aligned_base.push(b_chunk.get(i).cloned().unwrap_or((0, String::new())));
+                aligned_head.push(h_chunk.get(i).cloned().unwrap_or((0, String::new())));
+            }
+        } else if bi < base_lines.len() && hi < head_lines.len() {
+            // Both are context lines
+            aligned_base.push(base_lines[bi].clone());
+            aligned_head.push(head_lines[hi].clone());
+            bi += 1;
+            hi += 1;
+        } else if bi < base_lines.len() {
+            aligned_base.push(base_lines[bi].clone());
+            aligned_head.push((0, String::new()));
+            bi += 1;
+        } else {
+            aligned_base.push((0, String::new()));
+            aligned_head.push(head_lines[hi].clone());
+            hi += 1;
+        }
+    }
+
+    (aligned_base, aligned_head)
+}
+
+/// Compute the number of aligned lines without allocating full vectors.
+pub(super) fn aligned_line_count(base_lines: &[LineChange], head_lines: &[LineChange]) -> usize {
+    let mut count = 0;
+    let mut bi = 0;
+    let mut hi = 0;
+
+    while bi < base_lines.len() || hi < head_lines.len() {
+        let b_is_change = bi < base_lines.len() && base_lines[bi].1.starts_with('-');
+        let h_is_change = hi < head_lines.len() && head_lines[hi].1.starts_with('+');
+
+        if b_is_change || h_is_change {
+            let mut b_count = 0;
+            let mut h_count = 0;
+            while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                b_count += 1;
+                bi += 1;
+            }
+            while hi < head_lines.len() && head_lines[hi].1.starts_with('+') {
+                h_count += 1;
+                hi += 1;
+            }
+            count += b_count.max(h_count);
+        } else {
+            if bi < base_lines.len() {
+                bi += 1;
+            }
+            if hi < head_lines.len() {
+                hi += 1;
+            }
+            count += 1;
+        }
+    }
+
+    count
+}
+
+/// Compute the number of unified diff lines without allocating.
+pub(super) fn unified_line_count(base_lines: &[LineChange], head_lines: &[LineChange]) -> usize {
+    let mut count = 0;
+    let mut bi = 0;
+    let mut hi = 0;
+
+    while bi < base_lines.len() || hi < head_lines.len() {
+        let b_is_change = bi < base_lines.len() && base_lines[bi].1.starts_with('-');
+        let h_is_change = hi < head_lines.len() && head_lines[hi].1.starts_with('+');
+
+        if b_is_change || h_is_change {
+            while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                count += 1;
+                bi += 1;
+            }
+            while hi < head_lines.len() && head_lines[hi].1.starts_with('+') {
+                count += 1;
+                hi += 1;
+            }
+        } else {
+            if bi < base_lines.len() {
+                bi += 1;
+            }
+            if hi < head_lines.len() {
+                hi += 1;
+            }
+            count += 1;
+        }
+    }
+
+    count
+}
+
+fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rect) {
     let current_file = match app.file_names.get(app.current_file_idx) {
         Some(f) => f,
         None => return,
     };
-    let (base_lines, _) = match app.file_changes.get(current_file) {
+    let (base_lines, head_lines) = match app.file_changes.get(current_file) {
         Some(c) => c,
         None => return,
     };
     let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
     let is_focused = matches!(app.focused_pane, Pane::DiffContent);
+
+    let (aligned_base, aligned_head) = align_lines(base_lines, head_lines);
 
     render_diff_pane(
         f,
         app.left_label,
-        base_lines,
+        &aligned_base,
         current_file,
         scroll,
         is_focused,
-        area,
+        base_area,
     );
-}
-
-fn render_head_content(f: &mut Frame, app: &App, area: Rect) {
-    let current_file = match app.file_names.get(app.current_file_idx) {
-        Some(f) => f,
-        None => return,
-    };
-    let (_, head_lines) = match app.file_changes.get(current_file) {
-        Some(c) => c,
-        None => return,
-    };
-    let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
-    let is_focused = matches!(app.focused_pane, Pane::DiffContent);
-
     render_diff_pane(
         f,
         app.right_label,
-        head_lines,
+        &aligned_head,
         current_file,
         scroll,
         is_focused,
-        area,
+        head_area,
     );
+}
+
+/// Build unified diff lines by walking both lists in order.
+/// Context lines appear once; change blocks show removals then additions.
+pub(super) fn build_unified_lines(
+    base_lines: &[LineChange],
+    head_lines: &[LineChange],
+) -> Vec<LineChange> {
+    let mut unified = Vec::new();
+    let mut bi = 0;
+    let mut hi = 0;
+
+    while bi < base_lines.len() || hi < head_lines.len() {
+        let b_is_change = bi < base_lines.len() && base_lines[bi].1.starts_with('-');
+        let h_is_change = hi < head_lines.len() && head_lines[hi].1.starts_with('+');
+
+        if b_is_change || h_is_change {
+            // Change block: all removals first, then all additions
+            while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                unified.push(base_lines[bi].clone());
+                bi += 1;
+            }
+            while hi < head_lines.len() && head_lines[hi].1.starts_with('+') {
+                unified.push(head_lines[hi].clone());
+                hi += 1;
+            }
+        } else {
+            // Context line — take from base (preferred), or head if base exhausted
+            if bi < base_lines.len() {
+                unified.push(base_lines[bi].clone());
+                bi += 1;
+                if hi < head_lines.len() {
+                    hi += 1;
+                }
+            } else if hi < head_lines.len() {
+                unified.push(head_lines[hi].clone());
+                hi += 1;
+            }
+        }
+    }
+
+    unified
 }
 
 fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
@@ -332,35 +485,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
     let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
     let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
-    // Build unified lines using hash maps for O(n) lookups
-    let mut unified_lines: Vec<(usize, String)> = Vec::new();
-
-    let base_map: HashMap<usize, &String> = base_lines.iter().map(|(n, l)| (*n, l)).collect();
-    let head_map: HashMap<usize, &String> = head_lines.iter().map(|(n, l)| (*n, l)).collect();
-
-    let mut all_lines: Vec<(usize, bool)> = Vec::new();
-    for (num, _) in base_lines {
-        all_lines.push((*num, false));
-    }
-    for (num, _) in head_lines {
-        all_lines.push((*num, true));
-    }
-    all_lines.sort_by_key(|(num, _)| *num);
-
-    let mut processed_lines = HashSet::new();
-    for (num, is_head) in &all_lines {
-        if *is_head {
-            if let Some(line) = head_map.get(num) {
-                if !line.starts_with('-') && processed_lines.insert(*num) {
-                    unified_lines.push((*num, (*line).clone()));
-                }
-            }
-        } else if let Some(line) = base_map.get(num) {
-            if !line.starts_with('+') && processed_lines.insert(*num) {
-                unified_lines.push((*num, (*line).clone()));
-            }
-        }
-    }
+    let unified_lines = build_unified_lines(base_lines, head_lines);
 
     let title = format!("{} vs {}", app.left_label, app.right_label);
     render_diff_pane(
@@ -515,21 +640,8 @@ fn clamp_scroll(app: &mut App, content_area_height: u16) {
     };
 
     let content_len = match app.view_mode {
-        ViewMode::SideBySide => base.len().max(head.len()),
-        ViewMode::Unified => {
-            let mut seen = HashSet::new();
-            for (num, line) in base {
-                if !line.starts_with('+') {
-                    seen.insert(*num);
-                }
-            }
-            for (num, line) in head {
-                if !line.starts_with('-') {
-                    seen.insert(*num);
-                }
-            }
-            seen.len()
-        }
+        ViewMode::SideBySide => aligned_line_count(base, head),
+        ViewMode::Unified => unified_line_count(base, head),
     };
 
     let visible = content_area_height.saturating_sub(2) as usize;
