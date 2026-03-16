@@ -1,119 +1,104 @@
-# Giff - Git Diff Viewer with Interactive Rebase Support
+<div align="center">
 
-Giff is a terminal-based Git diff viewer with interactive rebase capabilities, syntax highlighting, and theme support.
+# giff
+
+**A terminal UI for git diffs with interactive rebase support.**
+
+[![CI](https://github.com/bahdotsh/giff/actions/workflows/ci.yml/badge.svg)](https://github.com/bahdotsh/giff/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/giff.svg)](https://crates.io/crates/giff)
+[![License](https://img.shields.io/crates/l/giff.svg)](LICENSE)
+
+</div>
+
+---
 
 ## Features
 
-- **Side-by-Side or Unified Diff View**: Toggle between two viewing modes for comparing changes
-- **Syntax Highlighting**: Automatic language-aware syntax highlighting via syntect
-- **Dark/Light Themes**: Built-in dark and light themes with full customization support
-- **Interactive Navigation**: Keyboard and mouse support for navigating files and diffs
-- **Help Modal**: Press `?` to view all keybindings in context
-- **Rebase Detection**: Automatically detects when a rebase is needed
-- **Interactive Rebasing**: Accept or reject individual changes during rebase
-- **Configuration File**: Persistent settings via `~/.config/giff/config.toml`
+- **Side-by-side & unified diffs** — toggle between layouts with a single key
+- **Syntax highlighting** — language-aware coloring via syntect
+- **Dark & light themes** — built-in themes with full customization through config
+- **Interactive rebase** — accept or reject individual changes, then commit
+- **Rebase detection** — notifies you when your branch is behind or has diverged
+- **Vim-style navigation** — keyboard-first with mouse scroll support
+- **Help overlay** — press `?` anywhere to see all keybindings in context
+- **Configurable** — persistent settings via `~/.config/giff/config.toml`
 
-## Installation
+## Install
 
-Using Cargo Install (Recommended):
-
-```
+```bash
 cargo install giff
 ```
 
-From source:
+Or build from source:
 
 ```bash
-git clone https://github.com/your-username/giff.git
-cd giff
-cargo build --release
+git clone https://github.com/bahdotsh/giff.git
+cd giff && cargo build --release
 ```
-
-The compiled binary will be available at `target/release/giff`.
 
 ## Usage
 
 ```bash
-# View diff between main branch and HEAD
-giff
-
-# View diff between two refs
-giff main feature-branch
-
-# Use a specific theme
-giff --theme light
-
-# Pass custom git diff arguments
-giff -d "--stat"
-
-# Auto-rebase if needed (non-interactive)
-giff --auto-rebase
+giff                        # uncommitted changes vs HEAD
+giff main feature-branch    # diff between two refs
+giff main                   # diff ref against working tree
+giff --theme light          # override theme
+giff -d "--stat"            # pass custom git diff args
+giff --auto-rebase          # auto-rebase if behind upstream
 ```
 
-## Configuration
+## Keybindings
 
-Giff reads settings from `~/.config/giff/config.toml`:
-
-```toml
-# Set default theme ("dark" or "light")
-theme = "dark"
-```
-
-The theme can also be overridden with `--theme` on the command line.
-
-## Keyboard Shortcuts
-
-### Diff Mode
+### Diff mode
 
 | Key | Action |
-|-----|--------|
-| `j` / `Down` | Navigate down |
-| `k` / `Up` | Navigate up |
-| `PageDown` | Page down |
-| `PageUp` | Page up |
-| `Home` | Go to first item |
-| `End` | Go to last item |
-| `Tab` | Toggle focus between file list and diff content |
-| `h` / `Left` | Focus file list |
-| `l` / `Right` | Focus diff content |
-| `u` | Toggle between unified and side-by-side view |
-| `t` | Toggle between dark and light theme |
+|---|---|
+| `j` / `k` | Navigate down / up |
+| `PageDown` / `PageUp` | Page down / up |
+| `Home` / `End` | Jump to first / last item |
+| `Tab` | Toggle focus between file list and diff |
+| `h` / `l` | Focus file list / diff content |
+| `u` | Toggle unified / side-by-side view |
+| `t` | Toggle dark / light theme |
 | `r` | Enter rebase mode |
-| `?` | Show help modal |
+| `?` | Show help |
 | `q` / `Esc` | Quit |
 
-### Rebase Mode
+### Rebase mode
 
 | Key | Action |
-|-----|--------|
-| `j` / `Down` | Navigate to next change |
-| `k` / `Up` | Navigate to previous change |
-| `a` | Accept change |
-| `x` | Reject change |
-| `n` | Go to next file with changes |
-| `p` | Go to previous file with changes |
+|---|---|
+| `j` / `k` | Next / previous change |
+| `a` / `x` | Accept / reject change |
+| `n` / `p` | Next / previous file with changes |
 | `c` | Commit accepted changes |
-| `?` | Show help modal |
-| `Esc` | Cancel and return to diff mode |
-
-### Rebase Notification Dialog
-
-| Key | Action |
-|-----|--------|
-| `r` | Perform rebase |
-| `i` | Ignore rebase suggestion |
-| `Esc` | Dismiss notification |
+| `?` | Show help |
+| `Esc` | Cancel rebase |
 
 ### Mouse
 
-| Input | Action |
-|-------|--------|
-| Scroll wheel | Scroll the focused pane (file list or diff content) |
+Scroll wheel works in both the file list and diff panes.
+
+## Configuration
+
+`~/.config/giff/config.toml`
+
+```toml
+theme = "dark"
+
+[themes.custom]
+base = "dark"
+accent = "#89b4fa"
+fg_added = "#a6e3a1"
+fg_removed = "#f38ba8"
+```
+
+See the built-in dark and light themes in [`src/ui/theme.rs`](src/ui/theme.rs) for all available color keys.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome — feel free to open an issue or submit a PR.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+[MIT](LICENSE) or [Unlicense](LICENSE), at your option.
