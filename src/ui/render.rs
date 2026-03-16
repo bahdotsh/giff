@@ -230,7 +230,7 @@ fn render_diff_pane(
     title: &str,
     lines: &[(usize, String)],
     filename: &str,
-    scroll: u16,
+    scroll: usize,
     is_focused: bool,
     area: Rect,
     theme: &Theme,
@@ -255,7 +255,7 @@ fn render_diff_pane(
 
     let title_text = if total_lines > visible_height {
         let max_scroll = total_lines.saturating_sub(visible_height);
-        let pos = (scroll as usize).min(max_scroll);
+        let pos = scroll.min(max_scroll);
         let pct = if max_scroll > 0 {
             (pos * 100) / max_scroll
         } else {
@@ -272,7 +272,9 @@ fn render_diff_pane(
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color));
 
-    let paragraph = Paragraph::new(content).block(block).scroll((scroll, 0));
+    // ratatui Paragraph::scroll() accepts (u16, u16); clamp for content >65k lines.
+    let scroll_u16 = scroll.min(u16::MAX as usize) as u16;
+    let paragraph = Paragraph::new(content).block(block).scroll((scroll_u16, 0));
     f.render_widget(paragraph, area);
 
     // Scrollbar
@@ -284,8 +286,7 @@ fn render_diff_pane(
             area.height.saturating_sub(2),
         );
         let max_scroll = total_lines.saturating_sub(visible_height);
-        let mut scrollbar_state =
-            ScrollbarState::new(max_scroll).position((scroll as usize).min(max_scroll));
+        let mut scrollbar_state = ScrollbarState::new(max_scroll).position(scroll.min(max_scroll));
         f.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
@@ -792,10 +793,10 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
 
 fn clamp_scroll(app: &mut App, content_area_height: u16) {
     let file = match app.file_names.get(app.current_file_idx) {
-        Some(f) => f.clone(),
+        Some(f) => f,
         None => return,
     };
-    let (base, head) = match app.file_changes.get(&file) {
+    let (base, head) = match app.file_changes.get(file) {
         Some(c) => c,
         None => return,
     };
@@ -807,13 +808,13 @@ fn clamp_scroll(app: &mut App, content_area_height: u16) {
 
     let visible = content_area_height.saturating_sub(2) as usize;
     if content_len <= visible {
-        app.scroll_positions.insert(file, 0);
+        app.scroll_positions.insert(file.clone(), 0);
         return;
     }
-    let max_scroll = (content_len - visible) as u16;
-    let scroll = app.scroll_positions.get(&file).copied().unwrap_or(0);
+    let max_scroll = content_len - visible;
+    let scroll = app.scroll_positions.get(file).copied().unwrap_or(0);
     if scroll > max_scroll {
-        app.scroll_positions.insert(file, max_scroll);
+        app.scroll_positions.insert(file.clone(), max_scroll);
     }
 }
 

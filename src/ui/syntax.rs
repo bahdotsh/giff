@@ -127,11 +127,16 @@ pub fn highlight_line_changes(
                 spans.extend(highlight_code_with_bg(rest, &mut highlighter, bg_added));
                 Line::from(spans)
             } else {
+                // Context lines in git diff format have a leading space;
+                // strip it so code aligns with changed lines (whose +/-
+                // prefix is also stripped) and so indentation-sensitive
+                // languages (Python, YAML) highlight correctly.
+                let content = line.strip_prefix(' ').unwrap_or(line);
                 let mut spans = vec![
                     Span::styled(format!("{:4} ", line_num), Style::default().fg(fg_line_num)),
                     Span::styled("  ", Style::default()),
                 ];
-                spans.extend(highlight_code(line.as_str(), &mut highlighter));
+                spans.extend(highlight_code(content, &mut highlighter));
                 Line::from(spans)
             }
         })

@@ -61,8 +61,21 @@ pub fn get_changes_between(
     ))
 }
 
+pub fn get_upstream_branch() -> Result<Option<String>, Box<dyn Error>> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD@{u}"])
+        .output()?;
+    if output.status.success() {
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
 fn get_diff_output_with_args(args: &[&str]) -> Result<String, Box<dyn Error>> {
-    let mut cmd_args = vec!["diff"];
+    let mut cmd_args = vec!["diff", "--no-color"];
     cmd_args.extend_from_slice(args);
 
     let output = Command::new("git").args(&cmd_args).output()?;
@@ -79,29 +92,19 @@ fn get_diff_output_with_args(args: &[&str]) -> Result<String, Box<dyn Error>> {
 }
 
 fn extract_left_label(args: &str) -> String {
-    // Try to extract meaningful label from diff args
-    if args.contains("..") {
-        // For format like "branch1..branch2"
-        let parts: Vec<&str> = args.split("..").collect();
-        if !parts.is_empty() {
-            return parts[0].trim().to_string();
-        }
-    }
-    // Default label
-    "Base".to_string()
+    args.split("..")
+        .next()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Base".to_string())
 }
 
 fn extract_right_label(args: &str) -> String {
-    // Try to extract meaningful label from diff args
-    if args.contains("..") {
-        // For format like "branch1..branch2"
-        let parts: Vec<&str> = args.split("..").collect();
-        if parts.len() > 1 {
-            return parts[1].trim().to_string();
-        }
-    }
-    // Default label
-    "Target".to_string()
+    args.split("..")
+        .nth(1)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Target".to_string())
 }
 
 fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
@@ -119,11 +122,12 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
         if let Some(caps) = DIFF_FILE_RE.captures(trimmed_line.as_ref()) {
             if !current_file.is_empty() {
                 file_changes.insert(
-                    current_file.clone(),
-                    (base_lines.clone(), head_lines.clone()),
+                    std::mem::take(&mut current_file),
+                    (
+                        std::mem::take(&mut base_lines),
+                        std::mem::take(&mut head_lines),
+                    ),
                 );
-                base_lines.clear();
-                head_lines.clear();
             }
 
             // Use second capture group as file path in most cases (the "b/" file)
@@ -154,7 +158,17 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
             || trimmed_line.starts_with("---")
             || trimmed_line.starts_with("+++")
             || trimmed_line.starts_with("@@")
-            || trimmed_line.starts_with("new")
+            || trimmed_line.starts_with("new file mode")
+            || trimmed_line.starts_with("new mode")
+            || trimmed_line.starts_with("old mode")
+            || trimmed_line.starts_with("deleted file mode")
+            || trimmed_line.starts_with("rename from")
+            || trimmed_line.starts_with("rename to")
+            || trimmed_line.starts_with("copy from")
+            || trimmed_line.starts_with("copy to")
+            || trimmed_line.starts_with("similarity index")
+            || trimmed_line.starts_with("dissimilarity index")
+            || trimmed_line.starts_with("Binary files")
         {
             continue;
         }
@@ -418,4 +432,99 @@ pub fn perform_rebase(upstream: &str) -> Result<bool, Box<dyn Error>> {
     }
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── extract_left_label / extract_right_label ────────────────────────
+
+    #[test]
+    fn left_label_from_range() {
+        assert_eq!(extract_left_label("main..feature"), "main");
+    }
+
+    #[test]
+    fn right_label_from_range() {
+        assert_eq!(extract_right_label("main..feature"), "feature");
+    }
+
+    #[test]
+    fn left_label_no_dots_returns_input() {
+        // No ".." means the whole string is the left side
+        assert_eq!(extract_left_label("--cached"), "--cached");
+    }
+
+    #[test]
+    fn right_label_no_dots_returns_default() {
+        // No ".." means there is no right side
+        assert_eq!(extract_right_label("--cached"), "Target");
+    }
+
+    #[test]
+    fn labels_with_empty_sides() {
+        // "..feature" → left side is empty → default
+        assert_eq!(extract_left_label("..feature"), "Base");
+        // "main.." → right side is empty → default
+        assert_eq!(extract_right_label("main.."), "Target");
+    }
+
+    #[test]
+    fn labels_trim_whitespace() {
+        assert_eq!(extract_left_label(" main .. feature "), "main");
+        assert_eq!(extract_right_label(" main .. feature "), "feature");
+    }
+
+    // ── parse_diff_output: metadata skipping ────────────────────────────
+
+    #[test]
+    fn parse_skips_rename_metadata() {
+        let diff = "\
+diff --git a/old.rs b/new.rs
+similarity index 95%
+rename from old.rs
+rename to new.rs
+index abc..def 100644
+--- a/old.rs
++++ b/new.rs
+@@ -1,3 +1,3 @@
+ fn main() {
+-    old();
++    new();
+ }
+";
+        let changes = parse_diff_output(diff).unwrap();
+        let (base, head) = changes.get("new.rs").expect("file should be present");
+        // Only actual diff lines should be present, no metadata leaking as context
+        assert!(
+            !base
+                .iter()
+                .any(|(_, l)| l.contains("similarity") || l.contains("rename")),
+            "metadata leaked into base lines: {:?}",
+            base
+        );
+        assert!(
+            !head
+                .iter()
+                .any(|(_, l)| l.contains("similarity") || l.contains("rename")),
+            "metadata leaked into head lines: {:?}",
+            head
+        );
+    }
+
+    #[test]
+    fn parse_skips_binary_files_line() {
+        let diff = "\
+diff --git a/image.png b/image.png
+Binary files a/image.png and b/image.png differ
+";
+        let changes = parse_diff_output(diff).unwrap();
+        // Binary file should have entry but no content lines
+        if let Some((base, head)) = changes.get("image.png") {
+            assert!(base.is_empty());
+            assert!(head.is_empty());
+        }
+        // Or no entry at all — both are acceptable
+    }
 }

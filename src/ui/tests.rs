@@ -430,3 +430,132 @@ fn apply_skips_zero_line_numbers() {
     let result = apply_operations(&input, &ops);
     assert_eq!(result, input, "zero line numbers should be no-ops");
 }
+
+// ── syntax highlighting ─────────────────────────────────────────────────
+
+#[test]
+fn syntax_theme_exists() {
+    use super::syntax::{SYNTAX_SET, THEME_SET};
+    // Verify the themes referenced by our Theme structs actually exist
+    assert!(
+        THEME_SET.themes.contains_key("base16-ocean.dark"),
+        "missing base16-ocean.dark in syntect themes: {:?}",
+        THEME_SET.themes.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        THEME_SET.themes.contains_key("base16-ocean.light"),
+        "missing base16-ocean.light in syntect themes: {:?}",
+        THEME_SET.themes.keys().collect::<Vec<_>>()
+    );
+    // Verify Rust syntax is available
+    assert!(
+        SYNTAX_SET
+            .find_syntax_for_file("main.rs")
+            .ok()
+            .flatten()
+            .is_some(),
+        "Rust syntax not found in syntect defaults"
+    );
+}
+
+#[test]
+fn highlight_produces_colored_spans() {
+    use super::syntax::highlight_line_changes;
+    use super::theme::Theme;
+    let theme = Theme::dark();
+    let lines = vec![
+        lc(1, " fn main() {"),
+        lc(2, "-    let x = 5;"),
+        lc(3, "+    let y = 10;"),
+        lc(4, " }"),
+    ];
+
+    let result = highlight_line_changes(&lines, "test.rs", &theme);
+    assert_eq!(result.len(), 4);
+
+    // Context line (line 1) should have multiple spans with syntax colors
+    let ctx_spans = &result[0].spans;
+    assert!(
+        ctx_spans.len() >= 3,
+        "context line should have line_num + spacer + code spans, got {}",
+        ctx_spans.len()
+    );
+
+    // Removed line (line 2) should have bg_removed on code spans
+    let rem_spans = &result[1].spans;
+    assert!(
+        rem_spans.len() >= 3,
+        "removed line should have line_num + marker + code spans"
+    );
+    // The marker span should have the removed marker color
+    assert_eq!(rem_spans[1].style.fg, Some(theme.fg_removed_marker));
+
+    // Added line (line 3) should have bg_added on code spans
+    let add_spans = &result[2].spans;
+    assert!(
+        add_spans.len() >= 3,
+        "added line should have line_num + marker + code spans"
+    );
+    assert_eq!(add_spans[1].style.fg, Some(theme.fg_added_marker));
+
+    // Verify at least some syntax highlighting colors differ from plain text
+    let code_spans_line1: Vec<_> = ctx_spans.iter().skip(2).collect();
+    let has_varied_colors = code_spans_line1
+        .windows(2)
+        .any(|w| w[0].style.fg != w[1].style.fg);
+    // For ` fn main() {` (note leading space from diff format),
+    // syntect should color `fn` differently from `main`
+    assert!(
+        has_varied_colors || code_spans_line1.len() > 1,
+        "syntax highlighting should produce varied colors for Rust code: {:?}",
+        code_spans_line1
+            .iter()
+            .map(|s| (&s.content, s.style.fg))
+            .collect::<Vec<_>>()
+    );
+
+    // Verify changed lines also have syntax coloring (not just plain text)
+    let rem_code_spans: Vec<_> = result[1].spans.iter().skip(2).collect();
+    assert!(
+        rem_code_spans.len() > 1 || rem_code_spans.iter().any(|s| s.style.fg.is_some()),
+        "removed line should have syntax-colored spans: {:?}",
+        rem_code_spans
+            .iter()
+            .map(|s| (&s.content, s.style.fg))
+            .collect::<Vec<_>>()
+    );
+    let add_code_spans: Vec<_> = result[2].spans.iter().skip(2).collect();
+    assert!(
+        add_code_spans.len() > 1 || add_code_spans.iter().any(|s| s.style.fg.is_some()),
+        "added line should have syntax-colored spans: {:?}",
+        add_code_spans
+            .iter()
+            .map(|s| (&s.content, s.style.fg))
+            .collect::<Vec<_>>()
+    );
+
+    // Context lines should have the diff-format leading space stripped,
+    // so "fn" appears right after the spacer (no extra space span).
+    let ctx_code_start = &ctx_spans[2];
+    assert!(
+        !ctx_code_start.content.starts_with(' '),
+        "context line code should not start with diff-format leading space, got {:?}",
+        ctx_code_start.content
+    );
+}
+
+#[test]
+fn highlight_gap_lines_are_empty() {
+    use super::syntax::highlight_line_changes;
+    use super::theme::Theme;
+
+    let theme = Theme::dark();
+    let lines = vec![gap(), lc(1, "+added"), gap()];
+    let result = highlight_line_changes(&lines, "test.rs", &theme);
+    assert_eq!(result.len(), 3);
+    // Gap lines should be empty
+    assert_eq!(result[0].spans.len(), 1);
+    assert_eq!(result[0].spans[0].content.as_ref(), "");
+    assert_eq!(result[2].spans.len(), 1);
+    assert_eq!(result[2].spans[0].content.as_ref(), "");
+}

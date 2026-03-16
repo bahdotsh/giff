@@ -36,14 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(rebase_msg) = diff::check_rebase_needed()? {
             eprintln!("{}", rebase_msg);
 
-            // Get upstream branch
-            let output = std::process::Command::new("git")
-                .args(["rev-parse", "--abbrev-ref", "HEAD@{u}"])
-                .output()?;
-
-            if output.status.success() {
-                let upstream = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
+            if let Some(upstream) = diff::get_upstream_branch()? {
                 eprintln!("Auto-rebasing onto {}...", upstream);
                 if diff::perform_rebase(&upstream)? {
                     eprintln!("Rebase successful!");
@@ -69,6 +62,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Default behavior: show uncommitted changes
         diff::get_uncommitted_changes()?
     };
+
+    if file_changes.is_empty() {
+        println!("No changes.");
+        return Ok(());
+    }
 
     // Load config and resolve theme
     let cfg = config::load_config();

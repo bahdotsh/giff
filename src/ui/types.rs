@@ -33,7 +33,7 @@ pub struct App<'a> {
     pub right_label: &'a str,
     pub current_file_idx: usize,
     pub file_names: Vec<String>,
-    pub scroll_positions: HashMap<String, u16>,
+    pub scroll_positions: HashMap<String, usize>,
     pub focused_pane: Pane,
     pub view_mode: ViewMode,
     pub app_mode: AppMode,

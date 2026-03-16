@@ -56,7 +56,7 @@ pub fn run_app(
 
     let mut scroll_positions = HashMap::new();
     for name in &file_names {
-        scroll_positions.insert(name.clone(), 0);
+        scroll_positions.insert(name.clone(), 0usize);
     }
 
     // Check if rebase is needed
