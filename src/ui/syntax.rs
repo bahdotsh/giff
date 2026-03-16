@@ -7,15 +7,10 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{self, ThemeSet};
 use syntect::parsing::SyntaxSet;
 
+use super::theme::Theme;
+
 pub static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 pub static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
-
-// Diff line background tints
-pub const BG_ADDED: Color = Color::Rgb(15, 40, 15);
-pub const BG_REMOVED: Color = Color::Rgb(45, 15, 15);
-const FG_LINE_NUM: Color = Color::Rgb(75, 80, 95);
-const FG_ADDED_MARKER: Color = Color::Rgb(80, 210, 105);
-const FG_REMOVED_MARKER: Color = Color::Rgb(235, 85, 85);
 
 fn to_ratatui_color(c: highlighting::Color) -> Color {
     Color::Rgb(c.r, c.g, c.b)
@@ -57,13 +52,17 @@ fn highlight_code_with_bg(
     }
 }
 
-pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<Line<'static>> {
+pub fn highlight_line_changes(
+    lines: &[(usize, String)],
+    filename: &str,
+    theme: &Theme,
+) -> Vec<Line<'static>> {
     let syntax = SYNTAX_SET
         .find_syntax_for_file(filename)
         .ok()
         .flatten()
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
-    let theme = match THEME_SET.themes.get("base16-ocean.dark") {
+    let syn_theme = match THEME_SET.themes.get(&theme.syntax_theme) {
         Some(t) => t,
         None => match THEME_SET.themes.values().next() {
             Some(t) => t,
@@ -80,7 +79,13 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
             }
         },
     };
-    let mut highlighter = HighlightLines::new(syntax, theme);
+    let mut highlighter = HighlightLines::new(syntax, syn_theme);
+
+    let fg_line_num = theme.fg_line_num;
+    let bg_removed = theme.bg_removed;
+    let bg_added = theme.bg_added;
+    let fg_removed_marker = theme.fg_removed_marker;
+    let fg_added_marker = theme.fg_added_marker;
 
     lines
         .iter()
@@ -93,37 +98,37 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
                 let mut spans = vec![
                     Span::styled(
                         format!("{:4} ", line_num),
-                        Style::default().fg(FG_LINE_NUM).bg(BG_REMOVED),
+                        Style::default().fg(fg_line_num).bg(bg_removed),
                     ),
                     Span::styled(
                         "- ",
                         Style::default()
-                            .fg(FG_REMOVED_MARKER)
-                            .bg(BG_REMOVED)
+                            .fg(fg_removed_marker)
+                            .bg(bg_removed)
                             .add_modifier(Modifier::BOLD),
                     ),
                 ];
-                spans.extend(highlight_code_with_bg(rest, &mut highlighter, BG_REMOVED));
+                spans.extend(highlight_code_with_bg(rest, &mut highlighter, bg_removed));
                 Line::from(spans)
             } else if let Some(rest) = line.strip_prefix('+') {
                 let mut spans = vec![
                     Span::styled(
                         format!("{:4} ", line_num),
-                        Style::default().fg(FG_LINE_NUM).bg(BG_ADDED),
+                        Style::default().fg(fg_line_num).bg(bg_added),
                     ),
                     Span::styled(
                         "+ ",
                         Style::default()
-                            .fg(FG_ADDED_MARKER)
-                            .bg(BG_ADDED)
+                            .fg(fg_added_marker)
+                            .bg(bg_added)
                             .add_modifier(Modifier::BOLD),
                     ),
                 ];
-                spans.extend(highlight_code_with_bg(rest, &mut highlighter, BG_ADDED));
+                spans.extend(highlight_code_with_bg(rest, &mut highlighter, bg_added));
                 Line::from(spans)
             } else {
                 let mut spans = vec![
-                    Span::styled(format!("{:4} ", line_num), Style::default().fg(FG_LINE_NUM)),
+                    Span::styled(format!("{:4} ", line_num), Style::default().fg(fg_line_num)),
                     Span::styled("  ", Style::default()),
                 ];
                 spans.extend(highlight_code(line.as_str(), &mut highlighter));

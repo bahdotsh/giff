@@ -1,3 +1,4 @@
+mod config;
 mod diff;
 mod ui;
 
@@ -21,6 +22,10 @@ struct Args {
 
     #[arg(short, long, help = "Auto-rebase if needed")]
     auto_rebase: bool,
+
+    /// Color theme ("dark", "light", or a custom theme name)
+    #[arg(short, long)]
+    theme: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -65,8 +70,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         diff::get_uncommitted_changes()?
     };
 
+    // Load config and resolve theme
+    let cfg = config::load_config();
+    let theme = config::resolve_theme(&cfg, args.theme.as_deref());
+
     // Start the interactive UI
-    ui::run_app(file_changes, &left_label, &right_label)?;
+    ui::run_app(file_changes, &left_label, &right_label, theme)?;
 
     Ok(())
 }

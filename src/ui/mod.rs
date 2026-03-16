@@ -2,6 +2,7 @@ mod event_loop;
 mod rebase;
 pub(crate) mod render;
 mod syntax;
+pub(crate) mod theme;
 mod types;
 
 #[cfg(test)]
@@ -31,6 +32,7 @@ pub fn run_app(
     file_changes: FileChanges,
     left_label: &str,
     right_label: &str,
+    theme: theme::Theme,
 ) -> Result<(), Box<dyn Error>> {
     // Install a panic hook that restores the terminal before printing the
     // panic message. Without this, a panic leaves the terminal in raw mode
@@ -76,6 +78,7 @@ pub fn run_app(
         show_rebase_modal: rebase_notification.is_some(),
         status_message: None,
         show_help_modal: false,
+        theme,
     };
 
     // Run the main loop

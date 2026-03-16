@@ -161,6 +161,7 @@ pub fn prepare_rebase_changes(app: &mut App) {
 }
 
 pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
@@ -172,10 +173,10 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
         let rebase_block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(BORDER_FOCUSED))
+            .border_style(Style::default().fg(t.border_focused))
             .title(Span::styled(
                 format!(" Rebase: {} ", current_file),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
             ));
         f.render_widget(&rebase_block, content_chunks[1]);
         let inner_area = rebase_block.inner(content_chunks[1]);
@@ -184,7 +185,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
             if changes.is_empty() {
                 let msg = Paragraph::new(Span::styled(
                     "No changes to rebase in this file",
-                    Style::default().fg(FG_DIM),
+                    Style::default().fg(t.fg_dim),
                 ))
                 .alignment(Alignment::Center);
                 f.render_widget(msg, inner_area);
@@ -216,22 +217,22 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     format!("Change {}/{}", app.current_change_idx + 1, changes.len()),
-                    Style::default().fg(FG_BRIGHT).add_modifier(Modifier::BOLD),
+                    Style::default().fg(t.fg_bright).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled("  \u{2502}  ", Style::default().fg(BORDER_DIM)),
+                Span::styled("  \u{2502}  ", Style::default().fg(t.border_dim)),
                 Span::styled(
                     format!("{} accepted", accepted),
-                    Style::default().fg(FG_ADDED),
+                    Style::default().fg(t.fg_added),
                 ),
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     format!("{} rejected", rejected),
-                    Style::default().fg(FG_REMOVED),
+                    Style::default().fg(t.fg_removed),
                 ),
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     format!("{} remaining", remaining),
-                    Style::default().fg(FG_DIM),
+                    Style::default().fg(t.fg_dim),
                 ),
             ];
             let progress = Paragraph::new(Line::from(progress_spans));
@@ -246,9 +247,9 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                     "Added"
                 };
                 let (state_symbol, state_color) = match current_change.state {
-                    ChangeState::Unselected => ("\u{25cb}", FG_DIM),
-                    ChangeState::Accepted => ("\u{25cf}", FG_ADDED),
-                    ChangeState::Rejected => ("\u{25cf}", FG_REMOVED),
+                    ChangeState::Unselected => ("\u{25cb}", t.fg_dim),
+                    ChangeState::Accepted => ("\u{25cf}", t.fg_added),
+                    ChangeState::Rejected => ("\u{25cf}", t.fg_removed),
                 };
 
                 let line_content = current_change
@@ -258,9 +259,9 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                     .unwrap_or(&current_change.content);
 
                 let type_color = if current_change.is_base {
-                    FG_REMOVED
+                    t.fg_removed
                 } else {
-                    FG_ADDED
+                    t.fg_added
                 };
 
                 let mut content_text = vec![
@@ -275,7 +276,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                         ),
                         Span::styled(
                             format!("(line {})", current_change.line_num),
-                            Style::default().fg(FG_DIM),
+                            Style::default().fg(t.fg_dim),
                         ),
                     ]),
                     Line::from(""),
@@ -292,10 +293,10 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                         .unwrap_or(paired);
                     content_text.push(Line::from(""));
                     content_text.push(Line::from(vec![
-                        Span::styled("  \u{2192} ", Style::default().fg(FG_DIM)),
+                        Span::styled("  \u{2192} ", Style::default().fg(t.fg_dim)),
                         Span::styled(
                             paired_text.to_owned(),
-                            Style::default().fg(FG_ADDED).add_modifier(Modifier::BOLD),
+                            Style::default().fg(t.fg_added).add_modifier(Modifier::BOLD),
                         ),
                     ]));
 
@@ -303,10 +304,10 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                         content_text.push(Line::from(""));
                         content_text.push(Line::from(vec![
                             Span::styled("  ", Style::default()),
-                            Span::styled("a", Style::default().fg(FG_KEY)),
-                            Span::styled(" accept incoming  ", Style::default().fg(FG_DIM)),
-                            Span::styled("x", Style::default().fg(FG_KEY)),
-                            Span::styled(" keep current", Style::default().fg(FG_DIM)),
+                            Span::styled("a", Style::default().fg(t.fg_key)),
+                            Span::styled(" accept incoming  ", Style::default().fg(t.fg_dim)),
+                            Span::styled("x", Style::default().fg(t.fg_key)),
+                            Span::styled(" keep current", Style::default().fg(t.fg_dim)),
                         ]));
                     }
                 }
@@ -314,21 +315,21 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                 let change_block_widget = Block::default()
                     .title(Span::styled(
                         " Current Change ",
-                        Style::default().fg(FG_KEY),
+                        Style::default().fg(t.fg_key),
                     ))
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .border_style(Style::default().fg(BORDER_FOCUSED));
+                    .border_style(Style::default().fg(t.border_focused));
 
                 let mut change_paragraph =
                     Paragraph::new(Text::from(content_text)).block(change_block_widget);
 
                 match current_change.state {
                     ChangeState::Accepted => {
-                        change_paragraph = change_paragraph.style(Style::default().bg(BG_ACCEPTED));
+                        change_paragraph = change_paragraph.style(Style::default().bg(t.bg_accepted));
                     }
                     ChangeState::Rejected => {
-                        change_paragraph = change_paragraph.style(Style::default().bg(BG_REJECTED));
+                        change_paragraph = change_paragraph.style(Style::default().bg(t.bg_rejected));
                     }
                     ChangeState::Unselected => {}
                 }
@@ -340,23 +341,23 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                 for line in &current_change.context {
                     context_lines.push(Line::from(Span::styled(
                         format!("  {}", line),
-                        Style::default().fg(FG_DIM),
+                        Style::default().fg(t.fg_dim),
                     )));
                 }
 
                 let context_block = Paragraph::new(Text::from(context_lines)).block(
                     Block::default()
-                        .title(Span::styled(" Context ", Style::default().fg(FG_DIM)))
+                        .title(Span::styled(" Context ", Style::default().fg(t.fg_dim)))
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
-                        .border_style(Style::default().fg(BORDER_DIM)),
+                        .border_style(Style::default().fg(t.border_dim)),
                 );
                 f.render_widget(context_block, rebase_chunks[2]);
             }
         } else {
             let msg = Paragraph::new(Span::styled(
                 "No changes found for this file",
-                Style::default().fg(FG_DIM),
+                Style::default().fg(t.fg_dim),
             ))
             .alignment(Alignment::Center);
             f.render_widget(msg, inner_area);

@@ -13,10 +13,15 @@ use crate::diff::LineChange;
 
 use super::rebase::render_rebase_ui;
 use super::syntax::highlight_line_changes;
+use super::theme::Theme;
 use super::types::*;
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let size = f.area();
+
+    // Apply the theme's root background to the entire frame
+    let bg = Block::default().style(Style::default().bg(app.theme.bg_default));
+    f.render_widget(bg, size);
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -80,6 +85,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let view_mode = match app.view_mode {
         ViewMode::SideBySide => "Side-by-Side",
         ViewMode::Unified => "Unified",
@@ -103,48 +109,49 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
     let mut spans = vec![
         Span::styled(
             " giff ",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
         ),
-        Span::styled("\u{2502} ", Style::default().fg(BORDER_DIM)),
+        Span::styled("\u{2502} ", Style::default().fg(t.border_dim)),
         Span::styled(
             format!("{} \u{2192} {}", app.left_label, app.right_label),
-            Style::default().fg(FG_NORMAL),
+            Style::default().fg(t.fg_normal),
         ),
-        Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)),
-        Span::styled(mode.to_owned(), Style::default().fg(ACCENT)),
-        Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)),
-        Span::styled(view_mode.to_owned(), Style::default().fg(FG_DIM)),
+        Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)),
+        Span::styled(mode.to_owned(), Style::default().fg(t.accent)),
+        Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)),
+        Span::styled(view_mode.to_owned(), Style::default().fg(t.fg_dim)),
     ];
 
     if !current_file.is_empty() {
-        spans.push(Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)));
+        spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)));
         spans.push(Span::styled(
             current_file.to_owned(),
-            Style::default().fg(FG_BRIGHT),
+            Style::default().fg(t.fg_bright),
         ));
     }
 
-    spans.push(Span::styled(" \u{2502} ", Style::default().fg(BORDER_DIM)));
+    spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)));
     spans.push(Span::styled(
         format!("{}/{}", current, file_count),
-        Style::default().fg(FG_DIM),
+        Style::default().fg(t.fg_dim),
     ));
 
-    let header = Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_HEADER));
+    let header = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_header));
     f.render_widget(header, area);
 }
 
 pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let is_focused = matches!(app.focused_pane, Pane::FileList);
     let border_color = if is_focused {
-        BORDER_FOCUSED
+        t.border_focused
     } else {
-        BORDER_DIM
+        t.border_dim
     };
     let title_style = if is_focused {
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.accent).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(FG_DIM)
+        Style::default().fg(t.fg_dim)
     };
 
     let block = Block::default()
@@ -155,7 +162,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
 
     if app.file_names.is_empty() {
         let empty =
-            Paragraph::new(Span::styled("  No changes", Style::default().fg(FG_DIM))).block(block);
+            Paragraph::new(Span::styled("  No changes", Style::default().fg(t.fg_dim))).block(block);
         f.render_widget(empty, area);
         return;
     }
@@ -168,9 +175,9 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
             let (adds, dels) = count_file_changes(app, file);
             let is_current = i == app.current_file_idx;
             let name_style = if is_current {
-                Style::default().fg(FG_BRIGHT).add_modifier(Modifier::BOLD)
+                Style::default().fg(t.fg_bright).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(FG_NORMAL)
+                Style::default().fg(t.fg_normal)
             };
 
             let mut spans = vec![Span::styled(file.clone(), name_style)];
@@ -179,7 +186,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
                 if adds > 0 {
                     spans.push(Span::styled(
                         format!("+{}", adds),
-                        Style::default().fg(FG_ADDED),
+                        Style::default().fg(t.fg_added),
                     ));
                 }
                 if adds > 0 && dels > 0 {
@@ -188,7 +195,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
                 if dels > 0 {
                     spans.push(Span::styled(
                         format!("-{}", dels),
-                        Style::default().fg(FG_REMOVED),
+                        Style::default().fg(t.fg_removed),
                     ));
                 }
             }
@@ -199,7 +206,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(BG_SELECTION))
+        .highlight_style(Style::default().bg(t.bg_selection))
         .highlight_symbol("\u{258c} ");
 
     f.render_stateful_widget(
@@ -217,19 +224,20 @@ fn render_diff_pane(
     scroll: u16,
     is_focused: bool,
     area: Rect,
+    theme: &Theme,
 ) {
     let border_color = if is_focused {
-        BORDER_FOCUSED
+        theme.border_focused
     } else {
-        BORDER_DIM
+        theme.border_dim
     };
     let title_style = if is_focused {
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(FG_DIM)
+        Style::default().fg(theme.fg_dim)
     };
 
-    let highlighted = highlight_line_changes(lines, filename);
+    let highlighted = highlight_line_changes(lines, filename, theme);
     let total_lines = highlighted.len();
     let content = Text::from(highlighted);
     let visible_height = area.height.saturating_sub(2) as usize;
@@ -423,6 +431,7 @@ fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rec
         scroll,
         is_focused,
         base_area,
+        &app.theme,
     );
     render_diff_pane(
         f,
@@ -432,6 +441,7 @@ fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rec
         scroll,
         is_focused,
         head_area,
+        &app.theme,
     );
 }
 
@@ -500,10 +510,12 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
         scroll,
         is_focused,
         area,
+        &app.theme,
     );
 }
 
 fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     if let Some(notification) = &app.rebase_notification {
         let mut max_line_length = 0;
         let mut line_count = 0;
@@ -518,10 +530,10 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
         let background = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(ACCENT))
+            .border_style(Style::default().fg(t.accent))
             .title(Span::styled(
                 " Rebase Recommended ",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
             ));
 
         f.render_widget(Clear, modal_area);
@@ -538,16 +550,16 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
             .split(inner_area);
 
         let message = Paragraph::new(notification.clone())
-            .style(Style::default().fg(FG_NORMAL))
+            .style(Style::default().fg(t.fg_normal))
             .alignment(Alignment::Center)
             .wrap(ratatui::widgets::Wrap { trim: true });
         f.render_widget(message, chunks[0]);
 
         let button_spans = vec![
-            Span::styled(" r ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
-            Span::styled(" Rebase now  ", Style::default().fg(FG_NORMAL)),
-            Span::styled(" i ", Style::default().fg(BG_HEADER).bg(FG_DIM)),
-            Span::styled(" Ignore", Style::default().fg(FG_NORMAL)),
+            Span::styled(" r ", Style::default().fg(t.bg_header).bg(t.fg_key)),
+            Span::styled(" Rebase now  ", Style::default().fg(t.fg_normal)),
+            Span::styled(" i ", Style::default().fg(t.bg_header).bg(t.fg_dim)),
+            Span::styled(" Ignore", Style::default().fg(t.fg_normal)),
         ];
         let buttons = Paragraph::new(Line::from(button_spans)).alignment(Alignment::Center);
         f.render_widget(buttons, chunks[1]);
@@ -555,31 +567,32 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     let is_rebase = matches!(app.app_mode, AppMode::Rebase);
 
     let modal_width = 56u16;
-    let modal_height = 28u16;
+    let modal_height = 29u16;
     let modal_area = centered_rect(modal_width, modal_height, area);
 
     // Dim the background behind the modal
-    let dim_bg = Block::default().style(Style::default().bg(BG_MODAL_DIM));
+    let dim_bg = Block::default().style(Style::default().bg(t.bg_modal_dim));
     f.render_widget(dim_bg, area);
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(BORDER_MODAL))
-        .style(Style::default().bg(BG_MODAL))
+        .border_style(Style::default().fg(t.border_modal))
+        .style(Style::default().bg(t.bg_modal))
         .title(Span::styled(
             " Keybindings ",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Line::from(vec![
             Span::styled(" ", Style::default()),
-            Span::styled(" ? ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
+            Span::styled(" ? ", Style::default().fg(t.bg_header).bg(t.fg_key)),
             Span::styled(" ", Style::default()),
-            Span::styled(" Esc ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
-            Span::styled(" to close ", Style::default().fg(FG_DIM)),
+            Span::styled(" Esc ", Style::default().fg(t.bg_header).bg(t.fg_key)),
+            Span::styled(" to close ", Style::default().fg(t.fg_dim)),
         ]));
 
     f.render_widget(Clear, modal_area);
@@ -588,12 +601,18 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
     let inner = block.inner(modal_area);
     let inner_width = inner.width as usize;
 
+    let accent = t.accent;
+    let fg_normal = t.fg_normal;
+    let fg_bright = t.fg_bright;
+    let bg_key_badge = t.bg_key_badge;
+    let fg_separator = t.fg_separator;
+
     let section = |title: &str| -> Line<'static> {
         Line::from(vec![
-            Span::styled("  \u{25cf} ", Style::default().fg(ACCENT)),
+            Span::styled("  \u{25cf} ", Style::default().fg(accent)),
             Span::styled(
                 title.to_owned(),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent).add_modifier(Modifier::BOLD),
             ),
         ])
     };
@@ -601,7 +620,7 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
     let sep = |w: usize| -> Line<'static> {
         Line::from(Span::styled(
             "\u{2500}".repeat(w),
-            Style::default().fg(FG_SEPARATOR),
+            Style::default().fg(fg_separator),
         ))
     };
 
@@ -610,10 +629,10 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("    ", Style::default()),
             Span::styled(
                 format!(" {:^8} ", key),
-                Style::default().fg(FG_BRIGHT).bg(BG_KEY_BADGE),
+                Style::default().fg(fg_bright).bg(bg_key_badge),
             ),
             Span::styled("  ", Style::default()),
-            Span::styled(desc.to_owned(), Style::default().fg(FG_NORMAL)),
+            Span::styled(desc.to_owned(), Style::default().fg(fg_normal)),
         ])
     };
 
@@ -658,6 +677,7 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
             row("h / \u{2190}", "Focus file list"),
             row("l / \u{2192}", "Focus diff content"),
             row("u", "Toggle unified / side-by-side"),
+            row("t", "Toggle dark / light theme"),
             row("r", "Enter rebase mode"),
             sep(inner_width),
             empty(),
@@ -669,7 +689,7 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let text = Text::from(lines);
-    let paragraph = Paragraph::new(text).style(Style::default().bg(BG_MODAL));
+    let paragraph = Paragraph::new(text).style(Style::default().bg(t.bg_modal));
     f.render_widget(paragraph, inner);
 }
 
@@ -704,14 +724,15 @@ fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
 }
 
 fn render_help(f: &mut Frame, app: &App, area: Rect) {
+    let t = &app.theme;
     if let Some(msg) = &app.status_message {
         let is_error = msg.starts_with("Error");
-        let color = if is_error { FG_REMOVED } else { FG_ADDED };
+        let color = if is_error { t.fg_removed } else { t.fg_added };
         let help = Paragraph::new(Line::from(Span::styled(
             format!(" {}", msg),
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         )))
-        .style(Style::default().bg(BG_HEADER));
+        .style(Style::default().bg(t.bg_header));
         f.render_widget(help, area);
         return;
     }
@@ -723,6 +744,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
             ("Tab", "Focus"),
             ("h/l", "Panes"),
             ("u", "View"),
+            ("t", "Theme"),
             ("PgUp/Dn", "Page"),
             ("r", "Rebase"),
             ("?", "Help"),
@@ -741,16 +763,16 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
     let mut spans: Vec<Span> = vec![Span::styled(" ", Style::default())];
     for (i, (key, desc)) in pairs.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled("  ", Style::default().fg(BORDER_DIM)));
+            spans.push(Span::styled("  ", Style::default().fg(t.border_dim)));
         }
-        spans.push(Span::styled((*key).to_owned(), Style::default().fg(FG_KEY)));
+        spans.push(Span::styled((*key).to_owned(), Style::default().fg(t.fg_key)));
         spans.push(Span::styled(
             format!(" {}", desc),
-            Style::default().fg(FG_DIM),
+            Style::default().fg(t.fg_dim),
         ));
     }
 
-    let help = Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_HEADER));
+    let help = Paragraph::new(Line::from(spans)).style(Style::default().bg(t.bg_header));
     f.render_widget(help, area);
 }
 

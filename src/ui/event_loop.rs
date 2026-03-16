@@ -6,6 +6,7 @@ use std::process::Command;
 
 use super::rebase::prepare_rebase_changes;
 use super::render::ui;
+use super::theme::Theme;
 use super::types::*;
 
 /// Returns `Ok(true)` when the app exits after a successful rebase
@@ -360,6 +361,14 @@ where
                             if let AppMode::Diff = app.app_mode {
                                 app.focused_pane = Pane::DiffContent;
                             }
+                        }
+                        KeyCode::Char('t') => {
+                            // Toggle between dark and light theme
+                            app.theme = if app.theme.is_dark {
+                                Theme::light()
+                            } else {
+                                Theme::dark()
+                            };
                         }
                         KeyCode::Char('u') => {
                             // Toggle between unified and side-by-side view (only in diff mode)
