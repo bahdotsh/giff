@@ -217,7 +217,9 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     format!("Change {}/{}", app.current_change_idx + 1, changes.len()),
-                    Style::default().fg(t.fg_bright).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(t.fg_bright)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("  \u{2502}  ", Style::default().fg(t.border_dim)),
                 Span::styled(
@@ -326,10 +328,12 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
 
                 match current_change.state {
                     ChangeState::Accepted => {
-                        change_paragraph = change_paragraph.style(Style::default().bg(t.bg_accepted));
+                        change_paragraph =
+                            change_paragraph.style(Style::default().bg(t.bg_accepted));
                     }
                     ChangeState::Rejected => {
-                        change_paragraph = change_paragraph.style(Style::default().bg(t.bg_rejected));
+                        change_paragraph =
+                            change_paragraph.style(Style::default().bg(t.bg_rejected));
                     }
                     ChangeState::Unselected => {}
                 }

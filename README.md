@@ -1,22 +1,27 @@
 # Giff - Git Diff Viewer with Interactive Rebase Support
 
-Giff is a terminal-based Git diff viewer with interactive rebase capabilities that allows you to view and manage changes between branches.
+Giff is a terminal-based Git diff viewer with interactive rebase capabilities, syntax highlighting, and theme support.
 
 ## Features
 
-- **Side-by-Side or Unified Diff View**: Choose between two different viewing modes for comparing changes
-- **Interactive Navigation**: Easily navigate through files and changes with keyboard shortcuts
+- **Side-by-Side or Unified Diff View**: Toggle between two viewing modes for comparing changes
+- **Syntax Highlighting**: Automatic language-aware syntax highlighting via syntect
+- **Dark/Light Themes**: Built-in dark and light themes with full customization support
+- **Interactive Navigation**: Keyboard and mouse support for navigating files and diffs
+- **Help Modal**: Press `?` to view all keybindings in context
 - **Rebase Detection**: Automatically detects when a rebase is needed
-- **Interactive Rebasing**: Accept or reject changes during rebase right from the interface
+- **Interactive Rebasing**: Accept or reject individual changes during rebase
+- **Configuration File**: Persistent settings via `~/.config/giff/config.toml`
 
 ## Installation
-The recommended way to install `giff` is using Rust's package manager, Cargo. Here are several methods:
 
-Using Cargo Install (Recommended)
+Using Cargo Install (Recommended):
 
-`cargo install giff`
+```
+cargo install giff
+```
 
-Clone the repository and build the project:
+From source:
 
 ```bash
 git clone https://github.com/your-username/giff.git
@@ -32,8 +37,29 @@ The compiled binary will be available at `target/release/giff`.
 # View diff between main branch and HEAD
 giff
 
-# View diff between a specific branch and HEAD
-giff --branch feature-branch
+# View diff between two refs
+giff main feature-branch
+
+# Use a specific theme
+giff --theme light
+
+# Pass custom git diff arguments
+giff -d "--stat"
+
+# Auto-rebase if needed (non-interactive)
+giff --auto-rebase
+```
+
+## Configuration
+
+Giff reads settings from `~/.config/giff/config.toml`:
+
+```toml
+# Set default theme ("dark" or "light")
+theme = "dark"
+```
+
+The theme can also be overridden with `--theme` on the command line.
 
 ## Keyboard Shortcuts
 
@@ -43,11 +69,17 @@ giff --branch feature-branch
 |-----|--------|
 | `j` / `Down` | Navigate down |
 | `k` / `Up` | Navigate up |
+| `PageDown` | Page down |
+| `PageUp` | Page up |
+| `Home` | Go to first item |
+| `End` | Go to last item |
 | `Tab` | Toggle focus between file list and diff content |
 | `h` / `Left` | Focus file list |
 | `l` / `Right` | Focus diff content |
 | `u` | Toggle between unified and side-by-side view |
+| `t` | Toggle between dark and light theme |
 | `r` | Enter rebase mode |
+| `?` | Show help modal |
 | `q` / `Esc` | Quit |
 
 ### Rebase Mode
@@ -61,7 +93,8 @@ giff --branch feature-branch
 | `n` | Go to next file with changes |
 | `p` | Go to previous file with changes |
 | `c` | Commit accepted changes |
-| `q` / `Esc` | Cancel and return to diff mode |
+| `?` | Show help modal |
+| `Esc` | Cancel and return to diff mode |
 
 ### Rebase Notification Dialog
 
@@ -70,6 +103,12 @@ giff --branch feature-branch
 | `r` | Perform rebase |
 | `i` | Ignore rebase suggestion |
 | `Esc` | Dismiss notification |
+
+### Mouse
+
+| Input | Action |
+|-------|--------|
+| Scroll wheel | Scroll the focused pane (file list or diff content) |
 
 ## Contributing
 

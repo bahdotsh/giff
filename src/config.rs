@@ -25,20 +25,14 @@ pub fn load_config() -> Config {
     match toml::from_str(&contents) {
         Ok(config) => config,
         Err(e) => {
-            eprintln!(
-                "Warning: failed to parse {}: {}",
-                config_path.display(),
-                e
-            );
+            eprintln!("Warning: failed to parse {}: {}", config_path.display(), e);
             Config::default()
         }
     }
 }
 
 pub fn resolve_theme(config: &Config, cli_theme: Option<&str>) -> Theme {
-    let theme_name = cli_theme
-        .or(config.theme.as_deref())
-        .unwrap_or("dark");
+    let theme_name = cli_theme.or(config.theme.as_deref()).unwrap_or("dark");
 
     if let Some(theme) = Theme::by_name(theme_name) {
         return theme;
