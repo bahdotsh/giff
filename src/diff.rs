@@ -1,6 +1,7 @@
 use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
@@ -206,14 +207,33 @@ impl ChangeOp {
     }
 }
 
-pub fn apply_changes(file_path: &str, operations: &[ChangeOp]) -> Result<(), Box<dyn Error>> {
-    if operations.is_empty() {
-        return Ok(());
+fn git_repo_root() -> Result<String, Box<dyn Error>> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()?;
+    if !output.status.success() {
+        return Err("Not in a git repository".into());
     }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
 
-    let original_content = std::fs::read_to_string(file_path)?;
-    let has_trailing_newline = original_content.ends_with('\n');
-    let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
+pub fn has_uncommitted_changes() -> Result<bool, Box<dyn Error>> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()?;
+    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
+/// Resolve a diff file path (relative to repo root) to an absolute path.
+fn resolve_diff_path(file_path: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let repo_root = git_repo_root()?;
+    Ok(Path::new(&repo_root).join(file_path))
+}
+
+/// Apply change operations to file content lines and return the result.
+/// This is the core logic extracted for testability.
+pub fn apply_operations(lines: &[String], operations: &[ChangeOp]) -> Vec<String> {
+    let mut lines: Vec<String> = lines.to_vec();
 
     // Phase 1: Apply Delete and Replace operations (already in base coordinates).
     // Process in descending line-number order so that removals at higher
@@ -294,11 +314,26 @@ pub fn apply_changes(file_path: &str, operations: &[ChangeOp]) -> Result<(), Box
         }
     }
 
-    let mut result = lines.join("\n");
+    lines
+}
+
+pub fn apply_changes(file_path: &str, operations: &[ChangeOp]) -> Result<(), Box<dyn Error>> {
+    if operations.is_empty() {
+        return Ok(());
+    }
+
+    let full_path = resolve_diff_path(file_path)?;
+    let original_content = std::fs::read_to_string(&full_path)?;
+    let has_trailing_newline = original_content.ends_with('\n');
+    let lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
+
+    let result_lines = apply_operations(&lines, operations);
+
+    let mut result = result_lines.join("\n");
     if has_trailing_newline {
         result.push('\n');
     }
-    std::fs::write(file_path, result)?;
+    std::fs::write(&full_path, result)?;
 
     Ok(())
 }
@@ -367,7 +402,20 @@ pub fn check_rebase_needed() -> Result<Option<String>, Box<dyn Error>> {
 }
 
 pub fn perform_rebase(upstream: &str) -> Result<bool, Box<dyn Error>> {
+    if has_uncommitted_changes()? {
+        return Err(
+            "Cannot rebase: you have uncommitted changes. Please commit or stash them first."
+                .into(),
+        );
+    }
+
     let output = Command::new("git").args(["rebase", upstream]).output()?;
 
-    Ok(output.status.success())
+    if !output.status.success() {
+        // Abort the failed rebase to leave the repo in a clean state
+        let _ = Command::new("git").args(["rebase", "--abort"]).output();
+        return Ok(false);
+    }
+
+    Ok(true)
 }

@@ -1,5 +1,5 @@
 use super::render::{align_lines, aligned_line_count, build_unified_lines, unified_line_count};
-use crate::diff::LineChange;
+use crate::diff::{apply_operations, ChangeOp, LineChange};
 
 fn lc(num: usize, s: &str) -> LineChange {
     (num, s.to_string())
@@ -292,4 +292,141 @@ fn align_produces_equal_length_sides() {
             ah.len(),
         );
     }
+}
+
+// ── apply_operations ────────────────────────────────────────────────────
+
+fn lines(strs: &[&str]) -> Vec<String> {
+    strs.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn apply_empty_operations() {
+    let input = lines(&["a", "b", "c"]);
+    let result = apply_operations(&input, &[]);
+    assert_eq!(result, input);
+}
+
+#[test]
+fn apply_single_replace() {
+    let input = lines(&["alpha", "beta", "gamma"]);
+    let ops = vec![ChangeOp::Replace(2, "BETA".to_string())];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["alpha", "BETA", "gamma"]));
+}
+
+#[test]
+fn apply_single_delete() {
+    let input = lines(&["a", "b", "c", "d"]);
+    let ops = vec![ChangeOp::Delete(2)];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["a", "c", "d"]));
+}
+
+#[test]
+fn apply_single_insert() {
+    let input = lines(&["a", "b", "c"]);
+    let ops = vec![ChangeOp::Insert {
+        base_pos: 2,
+        order: 1,
+        content: "NEW".to_string(),
+    }];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["a", "NEW", "b", "c"]));
+}
+
+#[test]
+fn apply_multiple_deletes_descending() {
+    // Deleting lines 2 and 4 from [a, b, c, d, e]
+    let input = lines(&["a", "b", "c", "d", "e"]);
+    let ops = vec![ChangeOp::Delete(2), ChangeOp::Delete(4)];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["a", "c", "e"]));
+}
+
+#[test]
+fn apply_delete_and_insert_at_same_position() {
+    // Delete line 3 and insert at base_pos 3
+    let input = lines(&["a", "b", "c", "d"]);
+    let ops = vec![
+        ChangeOp::Delete(3),
+        ChangeOp::Insert {
+            base_pos: 3,
+            order: 1,
+            content: "NEW".to_string(),
+        },
+    ];
+    let result = apply_operations(&input, &ops);
+    // Line 3 ("c") deleted, then "NEW" inserted at the same spot
+    assert_eq!(result, lines(&["a", "b", "NEW", "d"]));
+}
+
+#[test]
+fn apply_multiple_inserts_same_position_preserve_order() {
+    // Two inserts at the same base position should preserve source order
+    let input = lines(&["a", "b", "c"]);
+    let ops = vec![
+        ChangeOp::Insert {
+            base_pos: 2,
+            order: 10,
+            content: "FIRST".to_string(),
+        },
+        ChangeOp::Insert {
+            base_pos: 2,
+            order: 11,
+            content: "SECOND".to_string(),
+        },
+    ];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["a", "FIRST", "SECOND", "b", "c"]));
+}
+
+#[test]
+fn apply_delete_then_insert_adjusts_position() {
+    // Delete line 2, then insert at base_pos 4 — the insert should
+    // account for the earlier deletion
+    let input = lines(&["a", "b", "c", "d", "e"]);
+    let ops = vec![
+        ChangeOp::Delete(2),
+        ChangeOp::Insert {
+            base_pos: 4,
+            order: 1,
+            content: "NEW".to_string(),
+        },
+    ];
+    let result = apply_operations(&input, &ops);
+    // After delete: [a, c, d, e]. Insert adjusts: base_pos 4, 1 delete before it,
+    // adjusted=3, idx=2 → insert before "d"
+    assert_eq!(result, lines(&["a", "c", "NEW", "d", "e"]));
+}
+
+#[test]
+fn apply_replace_and_insert_mixed() {
+    let input = lines(&["a", "b", "c", "d"]);
+    let ops = vec![
+        ChangeOp::Replace(2, "B2".to_string()),
+        ChangeOp::Insert {
+            base_pos: 4,
+            order: 1,
+            content: "NEW".to_string(),
+        },
+    ];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, lines(&["a", "B2", "c", "NEW", "d"]));
+}
+
+#[test]
+fn apply_skips_zero_line_numbers() {
+    let input = lines(&["a", "b"]);
+    let ops = vec![
+        ChangeOp::Delete(0),
+        ChangeOp::Replace(0, "X".to_string()),
+        ChangeOp::Insert {
+            base_pos: 0,
+            order: 1,
+            content: "Y".to_string(),
+        },
+    ];
+    let result = apply_operations(&input, &ops);
+    assert_eq!(result, input, "zero line numbers should be no-ops");
 }

@@ -41,17 +41,15 @@ pub fn prepare_rebase_changes(app: &mut App) {
                     context
                 };
 
-            // First, find corresponding deleted/added lines to pair them
-            let mut paired_changes = HashMap::new();
+            // First, find corresponding deleted/added lines to pair them.
+            // Walk base and head in parallel: within each change block
+            // (consecutive deletions in base / additions in head between
+            // context lines) pair them sequentially — first deletion with
+            // first addition, second with second, etc.
+            let mut paired_changes: HashMap<usize, usize> = HashMap::new();
+            let mut used_head_nums: HashSet<usize> = HashSet::new();
 
-            // Map line numbers to their content for easier matching
-            let mut base_map = HashMap::new();
-            for (line_num, line) in base_lines {
-                if line.starts_with('-') {
-                    base_map.insert(*line_num, line.clone());
-                }
-            }
-
+            // Map line numbers to their content for easier lookup later
             let mut head_map = HashMap::new();
             for (line_num, line) in head_lines {
                 if line.starts_with('+') {
@@ -59,30 +57,43 @@ pub fn prepare_rebase_changes(app: &mut App) {
                 }
             }
 
-            // Pair deleted lines with nearby added lines (closest match first).
-            // Each head line can only be paired once.
-            let mut used_head_nums: HashSet<usize> = HashSet::new();
-            let mut sorted_base_nums: Vec<usize> = base_map.keys().copied().collect();
-            sorted_base_nums.sort();
-
-            for base_num in sorted_base_nums {
-                let mut best_head_num = None;
-                let mut best_distance = 5isize;
-
-                for head_num in head_map.keys() {
-                    if used_head_nums.contains(head_num) {
-                        continue;
+            {
+                let mut bi = 0;
+                let mut hi = 0;
+                loop {
+                    // Collect a run of deletions from base
+                    let mut del_run: Vec<usize> = Vec::new();
+                    while bi < base_lines.len() && base_lines[bi].1.starts_with('-') {
+                        del_run.push(base_lines[bi].0);
+                        bi += 1;
                     }
-                    let distance = (*head_num as isize - base_num as isize).abs();
-                    if distance < best_distance {
-                        best_distance = distance;
-                        best_head_num = Some(*head_num);
+                    // Collect a run of additions from head
+                    let mut add_run: Vec<usize> = Vec::new();
+                    while hi < head_lines.len() && head_lines[hi].1.starts_with('+') {
+                        add_run.push(head_lines[hi].0);
+                        hi += 1;
                     }
-                }
+                    // Pair them sequentially
+                    let pairs = del_run.len().min(add_run.len());
+                    for i in 0..pairs {
+                        paired_changes.insert(del_run[i], add_run[i]);
+                        used_head_nums.insert(add_run[i]);
+                    }
+                    // Remaining additions beyond the paired count stay out of
+                    // used_head_nums, so they become standalone insert changes below.
 
-                if let Some(head_num) = best_head_num {
-                    paired_changes.insert(base_num, head_num);
-                    used_head_nums.insert(head_num);
+                    // Skip past the next context line on both sides
+                    let base_done = bi >= base_lines.len();
+                    let head_done = hi >= head_lines.len();
+                    if base_done && head_done {
+                        break;
+                    }
+                    if !base_done {
+                        bi += 1;
+                    }
+                    if !head_done {
+                        hi += 1;
+                    }
                 }
             }
 
@@ -150,8 +161,17 @@ pub fn prepare_rebase_changes(app: &mut App) {
                 }
             }
 
-            // Sort by line number
-            changes.sort_by_key(|change| change.line_num);
+            // Sort by position in the base file so changes appear in
+            // file order. For base-side changes, use their base line number
+            // directly. For unpaired additions, use the computed base
+            // insertion position so they sort alongside nearby base changes.
+            changes.sort_by_key(|change| {
+                if change.is_base {
+                    change.line_num
+                } else {
+                    change.base_insert_pos.unwrap_or(change.line_num)
+                }
+            });
 
             app.rebase_changes.insert(file_name.clone(), changes);
         }

@@ -66,13 +66,14 @@ where
                                                     return Ok(true);
                                                 } else {
                                                     app.rebase_notification = Some(
-                                                    "Rebase failed. There might be conflicts to resolve.".to_string()
+                                                    "Rebase failed due to conflicts and was rolled back.".to_string()
                                                 );
                                                 }
                                             }
                                             Err(e) => {
-                                                app.rebase_notification =
-                                                    Some(format!("Error during rebase: {}", e));
+                                                app.show_rebase_modal = false;
+                                                app.status_message =
+                                                    Some(format!("Error: {}", e));
                                             }
                                         }
                                     }
