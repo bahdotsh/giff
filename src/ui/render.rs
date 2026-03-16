@@ -22,7 +22,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Header
-            Constraint::Min(0),   // Content
+            Constraint::Min(0),    // Content
             Constraint::Length(1), // Help
         ])
         .split(size);
@@ -50,10 +50,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             ViewMode::Unified => {
                 let content_chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Percentage(20),
-                        Constraint::Percentage(80),
-                    ])
+                    .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
                     .split(main_chunks[1]);
 
                 render_file_list(f, app, content_chunks[0]);
@@ -149,11 +146,8 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
         .border_style(Style::default().fg(border_color));
 
     if app.file_names.is_empty() {
-        let empty = Paragraph::new(Span::styled(
-            "  No changes",
-            Style::default().fg(FG_DIM),
-        ))
-        .block(block);
+        let empty =
+            Paragraph::new(Span::styled("  No changes", Style::default().fg(FG_DIM))).block(block);
         f.render_widget(empty, area);
         return;
     }
@@ -166,9 +160,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
             let (adds, dels) = count_file_changes(app, file);
             let is_current = i == app.current_file_idx;
             let name_style = if is_current {
-                Style::default()
-                    .fg(FG_BRIGHT)
-                    .add_modifier(Modifier::BOLD)
+                Style::default().fg(FG_BRIGHT).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(FG_NORMAL)
             };
@@ -395,9 +387,7 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(ACCENT))
             .title(Span::styled(
                 " Rebase Recommended ",
-                Style::default()
-                    .fg(ACCENT)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ));
 
         f.render_widget(Clear, modal_area);
@@ -498,10 +488,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
         if i > 0 {
             spans.push(Span::styled("  ", Style::default().fg(BORDER_DIM)));
         }
-        spans.push(Span::styled(
-            (*key).to_owned(),
-            Style::default().fg(FG_KEY),
-        ));
+        spans.push(Span::styled((*key).to_owned(), Style::default().fg(FG_KEY)));
         spans.push(Span::styled(
             format!(" {}", desc),
             Style::default().fg(FG_DIM),

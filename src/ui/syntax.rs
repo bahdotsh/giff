@@ -114,10 +114,7 @@ pub fn highlight_line_changes(lines: &[(usize, String)], filename: &str) -> Vec<
                 Line::from(spans)
             } else {
                 let mut spans = vec![
-                    Span::styled(
-                        format!("{:4} ", line_num),
-                        Style::default().fg(FG_LINE_NUM),
-                    ),
+                    Span::styled(format!("{:4} ", line_num), Style::default().fg(FG_LINE_NUM)),
                     Span::styled("  ", Style::default()),
                 ];
                 spans.extend(highlight_code(line.as_str(), &mut highlighter));

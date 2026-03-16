@@ -8,8 +8,7 @@ static DIFF_FILE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^diff --git a/(.+) b/(.+)$").unwrap());
 static HUNK_HEADER_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^@@ -(\d+),?\d* \+(\d+),?\d* @@").unwrap());
-static ANSI_ESCAPE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\x1b\[.*?m").unwrap());
+static ANSI_ESCAPE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[.*?m").unwrap());
 
 pub type LineChange = (usize, String);
 pub type FileChanges = HashMap<String, (Vec<LineChange>, Vec<LineChange>)>;

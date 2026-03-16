@@ -163,10 +163,7 @@ pub fn prepare_rebase_changes(app: &mut App) {
 pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(80),
-        ])
+        .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
         .split(area);
 
     render_file_list(f, app, content_chunks[0]);
@@ -178,9 +175,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(BORDER_FOCUSED))
             .title(Span::styled(
                 format!(" Rebase: {} ", current_file),
-                Style::default()
-                    .fg(ACCENT)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ));
         f.render_widget(&rebase_block, content_chunks[1]);
         let inner_area = rebase_block.inner(content_chunks[1]);
@@ -220,14 +215,8 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
             let progress_spans = vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(
-                    format!(
-                        "Change {}/{}",
-                        app.current_change_idx + 1,
-                        changes.len()
-                    ),
-                    Style::default()
-                        .fg(FG_BRIGHT)
-                        .add_modifier(Modifier::BOLD),
+                    format!("Change {}/{}", app.current_change_idx + 1, changes.len()),
+                    Style::default().fg(FG_BRIGHT).add_modifier(Modifier::BOLD),
                 ),
                 Span::styled("  \u{2502}  ", Style::default().fg(BORDER_DIM)),
                 Span::styled(
@@ -282,9 +271,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                         ),
                         Span::styled(
                             format!("{} ", change_type),
-                            Style::default()
-                                .fg(type_color)
-                                .add_modifier(Modifier::BOLD),
+                            Style::default().fg(type_color).add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
                             format!("(line {})", current_change.line_num),
@@ -308,9 +295,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                         Span::styled("  \u{2192} ", Style::default().fg(FG_DIM)),
                         Span::styled(
                             paired_text.to_owned(),
-                            Style::default()
-                                .fg(FG_ADDED)
-                                .add_modifier(Modifier::BOLD),
+                            Style::default().fg(FG_ADDED).add_modifier(Modifier::BOLD),
                         ),
                     ]));
 
@@ -335,17 +320,15 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
                     .border_type(BorderType::Rounded)
                     .border_style(Style::default().fg(BORDER_FOCUSED));
 
-                let mut change_paragraph = Paragraph::new(Text::from(content_text))
-                    .block(change_block_widget);
+                let mut change_paragraph =
+                    Paragraph::new(Text::from(content_text)).block(change_block_widget);
 
                 match current_change.state {
                     ChangeState::Accepted => {
-                        change_paragraph =
-                            change_paragraph.style(Style::default().bg(BG_ACCEPTED));
+                        change_paragraph = change_paragraph.style(Style::default().bg(BG_ACCEPTED));
                     }
                     ChangeState::Rejected => {
-                        change_paragraph =
-                            change_paragraph.style(Style::default().bg(BG_REJECTED));
+                        change_paragraph = change_paragraph.style(Style::default().bg(BG_REJECTED));
                     }
                     ChangeState::Unselected => {}
                 }
@@ -363,10 +346,7 @@ pub fn render_rebase_ui(f: &mut Frame, app: &App, area: Rect) {
 
                 let context_block = Paragraph::new(Text::from(context_lines)).block(
                     Block::default()
-                        .title(Span::styled(
-                            " Context ",
-                            Style::default().fg(FG_DIM),
-                        ))
+                        .title(Span::styled(" Context ", Style::default().fg(FG_DIM)))
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
                         .border_style(Style::default().fg(BORDER_DIM)),

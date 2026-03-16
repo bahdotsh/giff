@@ -448,21 +448,28 @@ where
                                 if mouse.column < file_list_width {
                                     if !app.file_names.is_empty() {
                                         if delta > 0 {
-                                            app.current_file_idx = (app.current_file_idx + delta as usize)
+                                            app.current_file_idx = (app.current_file_idx
+                                                + delta as usize)
                                                 .min(app.file_names.len() - 1);
                                         } else {
-                                            app.current_file_idx = app.current_file_idx
+                                            app.current_file_idx = app
+                                                .current_file_idx
                                                 .saturating_sub((-delta) as usize);
                                         }
                                     }
-                                } else if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                } else if let Some(file) = app.file_names.get(app.current_file_idx)
+                                {
                                     let scroll = *app.scroll_positions.get(file).unwrap_or(&0);
                                     if delta > 0 {
-                                        app.scroll_positions
-                                            .insert(file.clone(), scroll.saturating_add(delta as u16));
+                                        app.scroll_positions.insert(
+                                            file.clone(),
+                                            scroll.saturating_add(delta as u16),
+                                        );
                                     } else {
-                                        app.scroll_positions
-                                            .insert(file.clone(), scroll.saturating_sub((-delta) as u16));
+                                        app.scroll_positions.insert(
+                                            file.clone(),
+                                            scroll.saturating_sub((-delta) as u16),
+                                        );
                                     }
                                 }
                             }
@@ -471,10 +478,12 @@ where
                                     if let Some(changes) = app.rebase_changes.get(file) {
                                         if !changes.is_empty() {
                                             if delta > 0 {
-                                                app.current_change_idx = (app.current_change_idx + delta as usize)
+                                                app.current_change_idx = (app.current_change_idx
+                                                    + delta as usize)
                                                     .min(changes.len() - 1);
                                             } else {
-                                                app.current_change_idx = app.current_change_idx
+                                                app.current_change_idx = app
+                                                    .current_change_idx
                                                     .saturating_sub((-delta) as usize);
                                             }
                                         }
