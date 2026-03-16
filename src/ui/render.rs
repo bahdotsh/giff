@@ -73,6 +73,10 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     if app.show_rebase_modal {
         render_rebase_notification(f, app, size);
     }
+
+    if app.show_help_modal {
+        render_help_modal(f, app, size);
+    }
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect) {
@@ -550,6 +554,113 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
+    let is_rebase = matches!(app.app_mode, AppMode::Rebase);
+
+    let modal_width = 56u16;
+    let modal_height = 24u16;
+    let modal_area = centered_rect(modal_width, modal_height, area);
+
+    // Dim the background behind the modal
+    let dim_bg = Block::default().style(Style::default().bg(BG_MODAL_DIM));
+    f.render_widget(dim_bg, area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_MODAL))
+        .style(Style::default().bg(BG_MODAL))
+        .title(Span::styled(
+            " Keybindings ",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ))
+        .title_bottom(Line::from(vec![
+            Span::styled(" ", Style::default()),
+            Span::styled(" ? ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
+            Span::styled(" ", Style::default()),
+            Span::styled(" Esc ", Style::default().fg(BG_HEADER).bg(FG_KEY)),
+            Span::styled(" to close ", Style::default().fg(FG_DIM)),
+        ]));
+
+    f.render_widget(Clear, modal_area);
+    f.render_widget(&block, modal_area);
+
+    let inner = block.inner(modal_area);
+    let inner_width = inner.width as usize;
+
+    let section = |title: &str| -> Line<'static> {
+        Line::from(vec![
+            Span::styled("  \u{25cf} ", Style::default().fg(ACCENT)),
+            Span::styled(
+                title.to_owned(),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+        ])
+    };
+
+    let sep = |w: usize| -> Line<'static> {
+        Line::from(Span::styled(
+            "\u{2500}".repeat(w),
+            Style::default().fg(FG_SEPARATOR),
+        ))
+    };
+
+    let row = |key: &str, desc: &str| -> Line<'static> {
+        Line::from(vec![
+            Span::styled("    ", Style::default()),
+            Span::styled(
+                format!(" {:^8} ", key),
+                Style::default().fg(FG_BRIGHT).bg(BG_KEY_BADGE),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(desc.to_owned(), Style::default().fg(FG_NORMAL)),
+        ])
+    };
+
+    let mut lines: Vec<Line<'static>> = vec![
+        section("Navigation"),
+        row("j / \u{2193}", "Move down / next item"),
+        row("k / \u{2191}", "Move up / previous item"),
+        row("PgDn", "Page down"),
+        row("PgUp", "Page up"),
+        row("Home", "Go to first"),
+        row("End", "Go to last"),
+        sep(inner_width),
+    ];
+
+    if is_rebase {
+        lines.extend(vec![
+            section("Rebase"),
+            row("a", "Accept current change"),
+            row("x", "Reject current change"),
+            row("n", "Next file with changes"),
+            row("p", "Previous file with changes"),
+            row("c", "Commit accepted changes"),
+            row("Esc", "Back to diff mode"),
+            sep(inner_width),
+            section("General"),
+            row("?", "Toggle this help"),
+        ]);
+    } else {
+        lines.extend(vec![
+            section("Diff View"),
+            row("Tab", "Toggle focus (files / diff)"),
+            row("h / \u{2190}", "Focus file list"),
+            row("l / \u{2192}", "Focus diff content"),
+            row("u", "Toggle unified / side-by-side"),
+            row("r", "Enter rebase mode"),
+            sep(inner_width),
+            section("General"),
+            row("q / Esc", "Quit"),
+            row("?", "Toggle this help"),
+        ]);
+    }
+
+    let text = Text::from(lines);
+    let paragraph = Paragraph::new(text).style(Style::default().bg(BG_MODAL));
+    f.render_widget(paragraph, inner);
+}
+
 fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
     if r.width == 0 || r.height == 0 {
         return r;
@@ -602,6 +713,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
             ("u", "View"),
             ("PgUp/Dn", "Page"),
             ("r", "Rebase"),
+            ("?", "Help"),
         ],
         AppMode::Rebase => &[
             ("Esc", "Back"),
@@ -610,6 +722,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
             ("x", "Reject"),
             ("n/p", "Files"),
             ("c", "Commit"),
+            ("?", "Help"),
         ],
     };
 

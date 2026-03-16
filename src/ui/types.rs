@@ -16,6 +16,11 @@ pub const BG_HEADER: Color = Color::Rgb(25, 28, 36);
 pub const BG_SELECTION: Color = Color::Rgb(35, 48, 72);
 pub const BG_ACCEPTED: Color = Color::Rgb(15, 40, 15);
 pub const BG_REJECTED: Color = Color::Rgb(45, 15, 15);
+pub const BG_MODAL_DIM: Color = Color::Rgb(10, 12, 18);
+pub const BG_MODAL: Color = Color::Rgb(20, 22, 30);
+pub const BORDER_MODAL: Color = Color::Rgb(80, 110, 180);
+pub const BG_KEY_BADGE: Color = Color::Rgb(40, 45, 60);
+pub const FG_SEPARATOR: Color = Color::Rgb(40, 44, 55);
 
 pub enum AppMode {
     Diff,
@@ -57,6 +62,7 @@ pub struct App<'a> {
     pub show_rebase_modal: bool,
     /// Transient status message shown in the help bar (cleared on next keypress)
     pub status_message: Option<String>,
+    pub show_help_modal: bool,
 }
 
 pub enum Pane {

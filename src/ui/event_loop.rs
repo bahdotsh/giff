@@ -31,6 +31,17 @@ where
                     // Clear transient status message on any keypress
                     app.status_message = None;
 
+                    // Handle help modal if shown
+                    if app.show_help_modal {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => {
+                                app.show_help_modal = false;
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+
                     // Handle rebase modal if shown
                     if app.show_rebase_modal {
                         match key.code {
@@ -438,11 +449,14 @@ where
                                 }
                             }
                         }
+                        KeyCode::Char('?') => {
+                            app.show_help_modal = true;
+                        }
                         _ => {}
                     }
                 }
                 Event::Mouse(mouse) => {
-                    if app.show_rebase_modal {
+                    if app.show_help_modal || app.show_rebase_modal {
                         continue;
                     }
                     let size = terminal.size()?;

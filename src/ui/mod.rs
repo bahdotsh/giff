@@ -75,6 +75,7 @@ pub fn run_app(
         rebase_notification: rebase_notification.clone(),
         show_rebase_modal: rebase_notification.is_some(),
         status_message: None,
+        show_help_modal: false,
     };
 
     // Run the main loop
