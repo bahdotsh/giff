@@ -123,14 +123,20 @@ fn render_header(f: &mut Frame, app: &App, area: Rect) {
     ];
 
     if !current_file.is_empty() {
-        spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)));
+        spans.push(Span::styled(
+            " \u{2502} ",
+            Style::default().fg(t.border_dim),
+        ));
         spans.push(Span::styled(
             current_file.to_owned(),
             Style::default().fg(t.fg_bright),
         ));
     }
 
-    spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border_dim)));
+    spans.push(Span::styled(
+        " \u{2502} ",
+        Style::default().fg(t.border_dim),
+    ));
     spans.push(Span::styled(
         format!("{}/{}", current, file_count),
         Style::default().fg(t.fg_dim),
@@ -161,8 +167,8 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
         .border_style(Style::default().fg(border_color));
 
     if app.file_names.is_empty() {
-        let empty =
-            Paragraph::new(Span::styled("  No changes", Style::default().fg(t.fg_dim))).block(block);
+        let empty = Paragraph::new(Span::styled("  No changes", Style::default().fg(t.fg_dim)))
+            .block(block);
         f.render_widget(empty, area);
         return;
     }
@@ -175,7 +181,9 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
             let (adds, dels) = count_file_changes(app, file);
             let is_current = i == app.current_file_idx;
             let name_style = if is_current {
-                Style::default().fg(t.fg_bright).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(t.fg_bright)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(t.fg_normal)
             };
@@ -216,6 +224,7 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_diff_pane(
     f: &mut Frame,
     title: &str,
@@ -232,7 +241,9 @@ fn render_diff_pane(
         theme.border_dim
     };
     let title_style = if is_focused {
-        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(theme.accent)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(theme.fg_dim)
     };
@@ -765,7 +776,10 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
         if i > 0 {
             spans.push(Span::styled("  ", Style::default().fg(t.border_dim)));
         }
-        spans.push(Span::styled((*key).to_owned(), Style::default().fg(t.fg_key)));
+        spans.push(Span::styled(
+            (*key).to_owned(),
+            Style::default().fg(t.fg_key),
+        ));
         spans.push(Span::styled(
             format!(" {}", desc),
             Style::default().fg(t.fg_dim),

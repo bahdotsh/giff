@@ -37,29 +37,29 @@ impl Theme {
     pub fn dark() -> Self {
         Theme {
             is_dark: true,
-            accent: Color::Rgb(130, 170, 255),
-            border_focused: Color::Rgb(130, 170, 255),
-            border_dim: Color::Rgb(55, 58, 65),
-            fg_dim: Color::Rgb(100, 105, 115),
-            fg_normal: Color::Rgb(190, 195, 205),
-            fg_bright: Color::Rgb(230, 233, 240),
-            fg_added: Color::Rgb(80, 200, 100),
-            fg_removed: Color::Rgb(225, 85, 85),
-            fg_key: Color::Rgb(220, 185, 100),
-            bg_header: Color::Rgb(25, 28, 36),
-            bg_selection: Color::Rgb(35, 48, 72),
-            bg_accepted: Color::Rgb(15, 40, 15),
-            bg_rejected: Color::Rgb(45, 15, 15),
-            bg_modal_dim: Color::Rgb(10, 12, 18),
-            bg_modal: Color::Rgb(20, 22, 30),
-            border_modal: Color::Rgb(80, 110, 180),
-            bg_key_badge: Color::Rgb(40, 45, 60),
-            fg_separator: Color::Rgb(40, 44, 55),
-            bg_added: Color::Rgb(15, 40, 15),
-            bg_removed: Color::Rgb(45, 15, 15),
-            fg_line_num: Color::Rgb(75, 80, 95),
-            fg_added_marker: Color::Rgb(80, 210, 105),
-            fg_removed_marker: Color::Rgb(235, 85, 85),
+            accent: Color::Rgb(137, 180, 250),
+            border_focused: Color::Rgb(137, 180, 250),
+            border_dim: Color::Rgb(55, 56, 68),
+            fg_dim: Color::Rgb(108, 112, 134),
+            fg_normal: Color::Rgb(186, 194, 222),
+            fg_bright: Color::Rgb(205, 214, 244),
+            fg_added: Color::Rgb(166, 218, 149),
+            fg_removed: Color::Rgb(243, 139, 168),
+            fg_key: Color::Rgb(249, 226, 175),
+            bg_header: Color::Rgb(24, 24, 37),
+            bg_selection: Color::Rgb(40, 42, 56),
+            bg_accepted: Color::Rgb(20, 38, 24),
+            bg_rejected: Color::Rgb(42, 22, 26),
+            bg_modal_dim: Color::Rgb(14, 14, 22),
+            bg_modal: Color::Rgb(30, 30, 46),
+            border_modal: Color::Rgb(88, 91, 112),
+            bg_key_badge: Color::Rgb(42, 43, 58),
+            fg_separator: Color::Rgb(45, 46, 58),
+            bg_added: Color::Rgb(20, 38, 24),
+            bg_removed: Color::Rgb(42, 22, 26),
+            fg_line_num: Color::Rgb(88, 91, 112),
+            fg_added_marker: Color::Rgb(166, 218, 149),
+            fg_removed_marker: Color::Rgb(243, 139, 168),
             syntax_theme: "base16-ocean.dark".to_string(),
             bg_default: Color::Reset,
         }
@@ -68,31 +68,31 @@ impl Theme {
     pub fn light() -> Self {
         Theme {
             is_dark: false,
-            accent: Color::Rgb(190, 70, 80),
-            border_focused: Color::Rgb(200, 85, 95),
-            border_dim: Color::Rgb(215, 195, 190),
-            fg_dim: Color::Rgb(140, 120, 115),
-            fg_normal: Color::Rgb(55, 45, 45),
-            fg_bright: Color::Rgb(30, 20, 20),
-            fg_added: Color::Rgb(40, 140, 60),
-            fg_removed: Color::Rgb(195, 55, 55),
-            fg_key: Color::Rgb(180, 95, 60),
-            bg_header: Color::Rgb(248, 240, 238),
-            bg_selection: Color::Rgb(245, 225, 222),
-            bg_accepted: Color::Rgb(228, 248, 230),
-            bg_rejected: Color::Rgb(252, 228, 225),
-            bg_modal_dim: Color::Rgb(240, 232, 230),
-            bg_modal: Color::Rgb(252, 247, 245),
-            border_modal: Color::Rgb(200, 120, 115),
-            bg_key_badge: Color::Rgb(240, 225, 220),
-            fg_separator: Color::Rgb(225, 210, 205),
-            bg_added: Color::Rgb(232, 250, 232),
-            bg_removed: Color::Rgb(255, 232, 228),
-            fg_line_num: Color::Rgb(170, 150, 145),
-            fg_added_marker: Color::Rgb(45, 155, 65),
-            fg_removed_marker: Color::Rgb(205, 60, 55),
+            accent: Color::Rgb(56, 118, 208),
+            border_focused: Color::Rgb(56, 118, 208),
+            border_dim: Color::Rgb(210, 214, 222),
+            fg_dim: Color::Rgb(128, 136, 154),
+            fg_normal: Color::Rgb(46, 52, 64),
+            fg_bright: Color::Rgb(26, 32, 42),
+            fg_added: Color::Rgb(32, 146, 66),
+            fg_removed: Color::Rgb(210, 56, 64),
+            fg_key: Color::Rgb(172, 110, 8),
+            bg_header: Color::Rgb(247, 248, 250),
+            bg_selection: Color::Rgb(235, 241, 252),
+            bg_accepted: Color::Rgb(220, 245, 225),
+            bg_rejected: Color::Rgb(255, 225, 223),
+            bg_modal_dim: Color::Rgb(240, 241, 244),
+            bg_modal: Color::Rgb(255, 255, 255),
+            border_modal: Color::Rgb(190, 196, 210),
+            bg_key_badge: Color::Rgb(238, 240, 246),
+            fg_separator: Color::Rgb(228, 230, 236),
+            bg_added: Color::Rgb(220, 245, 225),
+            bg_removed: Color::Rgb(255, 225, 223),
+            fg_line_num: Color::Rgb(158, 166, 182),
+            fg_added_marker: Color::Rgb(32, 146, 66),
+            fg_removed_marker: Color::Rgb(210, 56, 64),
             syntax_theme: "base16-ocean.light".to_string(),
-            bg_default: Color::Rgb(253, 248, 246),
+            bg_default: Color::Rgb(252, 252, 254),
         }
     }
 
@@ -262,35 +262,30 @@ mod tests {
         assert!(Theme::by_name("neon").is_none());
     }
 
-    // ── Dark theme preserves original hardcoded values ──────────────────
+    // ── Theme structural invariants ─────────────────────────────────────
 
     #[test]
-    fn dark_theme_matches_original_constants() {
+    fn dark_theme_structural_invariants() {
         let t = Theme::dark();
-        assert_eq!(t.accent, Color::Rgb(130, 170, 255));
-        assert_eq!(t.border_focused, Color::Rgb(130, 170, 255));
-        assert_eq!(t.border_dim, Color::Rgb(55, 58, 65));
-        assert_eq!(t.fg_dim, Color::Rgb(100, 105, 115));
-        assert_eq!(t.fg_normal, Color::Rgb(190, 195, 205));
-        assert_eq!(t.fg_bright, Color::Rgb(230, 233, 240));
-        assert_eq!(t.fg_added, Color::Rgb(80, 200, 100));
-        assert_eq!(t.fg_removed, Color::Rgb(225, 85, 85));
-        assert_eq!(t.fg_key, Color::Rgb(220, 185, 100));
-        assert_eq!(t.bg_header, Color::Rgb(25, 28, 36));
-        assert_eq!(t.bg_selection, Color::Rgb(35, 48, 72));
-        assert_eq!(t.bg_accepted, Color::Rgb(15, 40, 15));
-        assert_eq!(t.bg_rejected, Color::Rgb(45, 15, 15));
-        assert_eq!(t.bg_modal_dim, Color::Rgb(10, 12, 18));
-        assert_eq!(t.bg_modal, Color::Rgb(20, 22, 30));
-        assert_eq!(t.border_modal, Color::Rgb(80, 110, 180));
-        assert_eq!(t.bg_key_badge, Color::Rgb(40, 45, 60));
-        assert_eq!(t.fg_separator, Color::Rgb(40, 44, 55));
-        assert_eq!(t.bg_added, Color::Rgb(15, 40, 15));
-        assert_eq!(t.bg_removed, Color::Rgb(45, 15, 15));
-        assert_eq!(t.fg_line_num, Color::Rgb(75, 80, 95));
-        assert_eq!(t.fg_added_marker, Color::Rgb(80, 210, 105));
-        assert_eq!(t.fg_removed_marker, Color::Rgb(235, 85, 85));
+        assert!(t.is_dark);
+        assert_ne!(t.bg_added, t.bg_removed);
+        assert_ne!(t.fg_added, t.fg_removed);
+        assert_ne!(t.fg_added_marker, t.fg_removed_marker);
+        assert_ne!(t.bg_accepted, t.bg_rejected);
+        assert_eq!(t.syntax_theme, "base16-ocean.dark");
         assert_eq!(t.bg_default, Color::Reset);
+    }
+
+    #[test]
+    fn light_theme_structural_invariants() {
+        let t = Theme::light();
+        assert!(!t.is_dark);
+        assert_ne!(t.bg_added, t.bg_removed);
+        assert_ne!(t.fg_added, t.fg_removed);
+        assert_ne!(t.fg_added_marker, t.fg_removed_marker);
+        assert_ne!(t.bg_accepted, t.bg_rejected);
+        assert_eq!(t.syntax_theme, "base16-ocean.light");
+        assert_ne!(t.bg_default, Color::Reset);
     }
 
     // ── ThemeConfig::to_theme ───────────────────────────────────────────
