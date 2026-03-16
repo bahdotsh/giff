@@ -558,7 +558,7 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
     let is_rebase = matches!(app.app_mode, AppMode::Rebase);
 
     let modal_width = 56u16;
-    let modal_height = 24u16;
+    let modal_height = 28u16;
     let modal_area = centered_rect(modal_width, modal_height, area);
 
     // Dim the background behind the modal
@@ -617,8 +617,12 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
         ])
     };
 
+    let empty = || -> Line<'static> { Line::from("") };
+
     let mut lines: Vec<Line<'static>> = vec![
+        empty(),
         section("Navigation"),
+        empty(),
         row("j / \u{2193}", "Move down / next item"),
         row("k / \u{2191}", "Move up / previous item"),
         row("PgDn", "Page down"),
@@ -630,7 +634,9 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
 
     if is_rebase {
         lines.extend(vec![
+            empty(),
             section("Rebase"),
+            empty(),
             row("a", "Accept current change"),
             row("x", "Reject current change"),
             row("n", "Next file with changes"),
@@ -638,19 +644,25 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
             row("c", "Commit accepted changes"),
             row("Esc", "Back to diff mode"),
             sep(inner_width),
+            empty(),
             section("General"),
+            empty(),
             row("?", "Toggle this help"),
         ]);
     } else {
         lines.extend(vec![
+            empty(),
             section("Diff View"),
+            empty(),
             row("Tab", "Toggle focus (files / diff)"),
             row("h / \u{2190}", "Focus file list"),
             row("l / \u{2192}", "Focus diff content"),
             row("u", "Toggle unified / side-by-side"),
             row("r", "Enter rebase mode"),
             sep(inner_width),
+            empty(),
             section("General"),
+            empty(),
             row("q / Esc", "Quit"),
             row("?", "Toggle this help"),
         ]);
