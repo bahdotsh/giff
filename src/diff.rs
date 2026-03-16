@@ -112,7 +112,7 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
     let mut head_line_number = 1;
 
     for line in diff_output.lines() {
-        let trimmed_line = ANSI_ESCAPE_RE.replace_all(line.trim(), "");
+        let trimmed_line = ANSI_ESCAPE_RE.replace_all(line.trim_end(), "");
 
         // Handle file header
         if let Some(caps) = DIFF_FILE_RE.captures(trimmed_line.as_ref()) {
