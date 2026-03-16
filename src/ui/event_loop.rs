@@ -72,8 +72,7 @@ where
                                             }
                                             Err(e) => {
                                                 app.show_rebase_modal = false;
-                                                app.status_message =
-                                                    Some(format!("Error: {}", e));
+                                                app.status_message = Some(format!("Error: {}", e));
                                             }
                                         }
                                     }
