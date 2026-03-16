@@ -29,6 +29,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     render_header(f, app, main_chunks[0]);
 
+    // Clamp scroll position so it cannot exceed content bounds
+    if matches!(app.app_mode, AppMode::Diff) {
+        clamp_scroll(app, main_chunks[1].height);
+    }
+
     match app.app_mode {
         AppMode::Diff => match app.view_mode {
             ViewMode::SideBySide => {
@@ -497,6 +502,46 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
 
     let help = Paragraph::new(Line::from(spans)).style(Style::default().bg(BG_HEADER));
     f.render_widget(help, area);
+}
+
+fn clamp_scroll(app: &mut App, content_area_height: u16) {
+    let file = match app.file_names.get(app.current_file_idx) {
+        Some(f) => f.clone(),
+        None => return,
+    };
+    let (base, head) = match app.file_changes.get(&file) {
+        Some(c) => c,
+        None => return,
+    };
+
+    let content_len = match app.view_mode {
+        ViewMode::SideBySide => base.len().max(head.len()),
+        ViewMode::Unified => {
+            let mut seen = HashSet::new();
+            for (num, line) in base {
+                if !line.starts_with('+') {
+                    seen.insert(*num);
+                }
+            }
+            for (num, line) in head {
+                if !line.starts_with('-') {
+                    seen.insert(*num);
+                }
+            }
+            seen.len()
+        }
+    };
+
+    let visible = content_area_height.saturating_sub(2) as usize;
+    if content_len <= visible {
+        app.scroll_positions.insert(file, 0);
+        return;
+    }
+    let max_scroll = (content_len - visible) as u16;
+    let scroll = app.scroll_positions.get(&file).copied().unwrap_or(0);
+    if scroll > max_scroll {
+        app.scroll_positions.insert(file, max_scroll);
+    }
 }
 
 fn count_file_changes(app: &App, file: &str) -> (usize, usize) {
