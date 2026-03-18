@@ -18,7 +18,7 @@ dirs = "6.0.0"
 ratatui = { version = "0.30.0", features = ["all-widgets"] }
 regex = "1.10.6"
 serde = { version = "1.0.228", features = ["derive"] }
-syntect = { version = "5.2.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-onig"] }
+syntect = { version = "5.2.0", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }
 toml = "1.0.6"
 
 [profile.release]
