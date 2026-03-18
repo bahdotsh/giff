@@ -82,7 +82,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Start the interactive UI
-    ui::run_app(file_changes, &left_label, &right_label, theme, rebase_notification)?;
+    ui::run_app(
+        file_changes,
+        &left_label,
+        &right_label,
+        theme,
+        rebase_notification,
+    )?;
 
     Ok(())
 }

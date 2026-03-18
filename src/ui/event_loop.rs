@@ -22,23 +22,15 @@ fn commit_rebase_changes(app: &mut App) {
             if change.is_base {
                 if let Some(paired_content) = &change.paired_content {
                     // Replace: swap old content with incoming content
-                    let clean = paired_content
-                        .strip_prefix('+')
-                        .unwrap_or(paired_content);
-                    operations.push(diff::ChangeOp::Replace(
-                        change.line_num,
-                        clean.to_string(),
-                    ));
+                    let clean = paired_content.strip_prefix('+').unwrap_or(paired_content);
+                    operations.push(diff::ChangeOp::Replace(change.line_num, clean.to_string()));
                 } else {
                     // Delete: remove the line entirely
                     operations.push(diff::ChangeOp::Delete(change.line_num));
                 }
             } else {
                 // Insert: use computed base position
-                let clean = change
-                    .content
-                    .strip_prefix('+')
-                    .unwrap_or(&change.content);
+                let clean = change.content.strip_prefix('+').unwrap_or(&change.content);
                 let base_pos = change.base_insert_pos.unwrap_or(change.line_num);
                 operations.push(diff::ChangeOp::Insert {
                     base_pos,
