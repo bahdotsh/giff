@@ -9,7 +9,7 @@ use syntect::parsing::SyntaxSet;
 
 use super::theme::Theme;
 
-pub static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
+pub static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(two_face::syntax::extra_newlines);
 pub static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
 fn to_ratatui_color(c: highlighting::Color) -> Color {
