@@ -8,6 +8,8 @@
 [![Crates.io](https://img.shields.io/crates/v/giff.svg)](https://crates.io/crates/giff)
 [![License](https://img.shields.io/crates/l/giff.svg)](LICENSE)
 
+![giff demo](assets/demo.gif)
+
 </div>
 
 ---
@@ -15,13 +17,29 @@
 ## Features
 
 - **Side-by-side & unified diffs** — toggle between layouts with a single key
-- **Syntax highlighting** — language-aware coloring via syntect
+- **Syntax highlighting** — language-aware coloring for 130+ languages via syntect
 - **Dark & light themes** — built-in themes with full customization through config
 - **Interactive rebase** — accept or reject individual changes, then commit
 - **Rebase detection** — notifies you when your branch is behind or has diverged
 - **Vim-style navigation** — keyboard-first with mouse scroll support
 - **Help overlay** — press `?` anywhere to see all keybindings in context
 - **Configurable** — persistent settings via `~/.config/giff/config.toml`
+
+### Syntax highlighting
+
+![Rust syntax highlighting](assets/syntax-highlight.png)
+
+### Unified view
+
+![Unified diff view](assets/unified-view.png)
+
+### Light theme
+
+![Light theme](assets/light-theme.png)
+
+### Help overlay
+
+![Help overlay](assets/help-overlay.png)
 
 ## Install
 
