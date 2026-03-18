@@ -1,6 +1,7 @@
 use ratatui::style::Color;
 use serde::Deserialize;
 
+#[derive(Clone, PartialEq)]
 pub struct Theme {
     pub is_dark: bool,
     // General UI
@@ -22,6 +23,7 @@ pub struct Theme {
     pub border_modal: Color,
     pub bg_key_badge: Color,
     pub fg_separator: Color,
+    pub fg_badge: Color,
     // Syntax / diff
     pub bg_added: Color,
     pub bg_removed: Color,
@@ -55,6 +57,7 @@ impl Theme {
             border_modal: Color::Rgb(88, 91, 112),
             bg_key_badge: Color::Rgb(42, 43, 58),
             fg_separator: Color::Rgb(45, 46, 58),
+            fg_badge: Color::Rgb(24, 24, 37),
             bg_added: Color::Rgb(20, 38, 24),
             bg_removed: Color::Rgb(42, 22, 26),
             fg_line_num: Color::Rgb(88, 91, 112),
@@ -86,6 +89,7 @@ impl Theme {
             border_modal: Color::Rgb(190, 196, 210),
             bg_key_badge: Color::Rgb(238, 240, 246),
             fg_separator: Color::Rgb(228, 230, 236),
+            fg_badge: Color::Rgb(255, 255, 255),
             bg_added: Color::Rgb(220, 245, 225),
             bg_removed: Color::Rgb(255, 225, 223),
             fg_line_num: Color::Rgb(158, 166, 182),
@@ -137,6 +141,7 @@ pub struct ThemeConfig {
     pub border_modal: Option<String>,
     pub bg_key_badge: Option<String>,
     pub fg_separator: Option<String>,
+    pub fg_badge: Option<String>,
     pub bg_added: Option<String>,
     pub bg_removed: Option<String>,
     pub fg_line_num: Option<String>,
@@ -152,6 +157,12 @@ macro_rules! override_color {
             if let Some(ref s) = $config.$field {
                 if let Some(c) = parse_color(s) {
                     $theme.$field = c;
+                } else {
+                    eprintln!(
+                        "Warning: invalid color '{}' for '{}', using default",
+                        s,
+                        stringify!($field)
+                    );
                 }
             }
         )+
@@ -186,6 +197,7 @@ impl ThemeConfig {
             border_modal,
             bg_key_badge,
             fg_separator,
+            fg_badge,
             bg_added,
             bg_removed,
             fg_line_num,
@@ -348,7 +360,7 @@ mod tests {
             ..Default::default()
         };
         let t = cfg.to_theme();
-        // Invalid hex is silently ignored, keeps dark default
+        // Invalid hex is ignored (warning printed), keeps dark default
         assert_eq!(t.accent, Theme::dark().accent);
     }
 }

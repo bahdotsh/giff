@@ -45,6 +45,8 @@ pub struct App<'a> {
     pub status_message: Option<String>,
     pub show_help_modal: bool,
     pub theme: Theme,
+    pub theme_cycle: Vec<Theme>,
+    pub theme_cycle_idx: usize,
 }
 
 pub enum Pane {

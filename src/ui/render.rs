@@ -539,10 +539,15 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
         let modal_height = (line_count as u16 + 6).min(16);
         let modal_area = centered_rect(modal_width, modal_height, area);
 
+        // Dim the background behind the modal
+        let dim_bg = Block::default().style(Style::default().bg(t.bg_modal_dim));
+        f.render_widget(dim_bg, area);
+
         let background = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(t.accent))
+            .style(Style::default().bg(t.bg_modal))
             .title(Span::styled(
                 " Rebase Recommended ",
                 Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
@@ -568,9 +573,9 @@ fn render_rebase_notification(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(message, chunks[0]);
 
         let button_spans = vec![
-            Span::styled(" r ", Style::default().fg(t.bg_header).bg(t.fg_key)),
+            Span::styled(" r ", Style::default().fg(t.fg_badge).bg(t.fg_key)),
             Span::styled(" Rebase now  ", Style::default().fg(t.fg_normal)),
-            Span::styled(" i ", Style::default().fg(t.bg_header).bg(t.fg_dim)),
+            Span::styled(" i ", Style::default().fg(t.fg_badge).bg(t.fg_dim)),
             Span::styled(" Ignore", Style::default().fg(t.fg_normal)),
         ];
         let buttons = Paragraph::new(Line::from(button_spans)).alignment(Alignment::Center);
@@ -601,9 +606,9 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
         ))
         .title_bottom(Line::from(vec![
             Span::styled(" ", Style::default()),
-            Span::styled(" ? ", Style::default().fg(t.bg_header).bg(t.fg_key)),
+            Span::styled(" ? ", Style::default().fg(t.fg_badge).bg(t.fg_key)),
             Span::styled(" ", Style::default()),
-            Span::styled(" Esc ", Style::default().fg(t.bg_header).bg(t.fg_key)),
+            Span::styled(" Esc ", Style::default().fg(t.fg_badge).bg(t.fg_key)),
             Span::styled(" to close ", Style::default().fg(t.fg_dim)),
         ]));
 

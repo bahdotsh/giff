@@ -62,9 +62,18 @@ pub fn highlight_line_changes(
         .ok()
         .flatten()
         .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+    let fallback_name = if theme.is_dark {
+        "base16-ocean.dark"
+    } else {
+        "base16-ocean.light"
+    };
     let syn_theme = match THEME_SET.themes.get(&theme.syntax_theme) {
         Some(t) => t,
-        None => match THEME_SET.themes.values().next() {
+        None => match THEME_SET
+            .themes
+            .get(fallback_name)
+            .or_else(|| THEME_SET.themes.values().next())
+        {
             Some(t) => t,
             None => {
                 return lines

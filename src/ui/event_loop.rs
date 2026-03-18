@@ -5,7 +5,6 @@ use std::io;
 
 use super::rebase::prepare_rebase_changes;
 use super::render::ui;
-use super::theme::Theme;
 use super::types::*;
 
 fn commit_rebase_changes(app: &mut App) {
@@ -364,12 +363,12 @@ where
                             }
                         }
                         KeyCode::Char('t') => {
-                            // Toggle between dark and light theme
-                            app.theme = if app.theme.is_dark {
-                                Theme::light()
-                            } else {
-                                Theme::dark()
-                            };
+                            // Cycle through available themes
+                            if !app.theme_cycle.is_empty() {
+                                app.theme_cycle_idx =
+                                    (app.theme_cycle_idx + 1) % app.theme_cycle.len();
+                                app.theme = app.theme_cycle[app.theme_cycle_idx].clone();
+                            }
                         }
                         KeyCode::Char('u') => {
                             // Toggle between unified and side-by-side view (only in diff mode)
@@ -509,6 +508,8 @@ mod tests {
             status_message: None,
             show_help_modal: false,
             theme: Theme::dark(),
+            theme_cycle: vec![Theme::dark(), Theme::light()],
+            theme_cycle_idx: 0,
         }
     }
 

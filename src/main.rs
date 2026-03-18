@@ -74,6 +74,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Load config and resolve theme
     let cfg = config::load_config();
     let theme = config::resolve_theme(&cfg, args.theme.as_deref());
+    if !ui::is_valid_syntax_theme(&theme.syntax_theme) {
+        eprintln!(
+            "Warning: syntax theme '{}' not found, using fallback",
+            theme.syntax_theme
+        );
+    }
 
     // Start the interactive UI
     ui::run_app(file_changes, &left_label, &right_label, theme, rebase_notification)?;

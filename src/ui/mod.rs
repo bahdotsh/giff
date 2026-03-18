@@ -21,6 +21,11 @@ use std::{error::Error, io};
 use event_loop::run_ui;
 use types::*;
 
+/// Check if a syntax highlighting theme name is available in syntect.
+pub fn is_valid_syntax_theme(name: &str) -> bool {
+    syntax::THEME_SET.themes.contains_key(name)
+}
+
 /// Restore the terminal to its normal state. Best-effort: errors are ignored
 /// because this is typically called during cleanup or panic recovery.
 fn restore_terminal() {
@@ -60,6 +65,17 @@ pub fn run_app(
         scroll_positions.insert(name.clone(), 0usize);
     }
 
+    // Build theme cycle: [initial, dark, light] with dedup
+    let dark = theme::Theme::dark();
+    let light = theme::Theme::light();
+    let mut theme_cycle = vec![theme.clone()];
+    if theme != dark {
+        theme_cycle.push(dark);
+    }
+    if theme != light {
+        theme_cycle.push(light);
+    }
+
     let app = App {
         file_changes: &file_changes,
         left_label,
@@ -77,6 +93,8 @@ pub fn run_app(
         status_message: None,
         show_help_modal: false,
         theme,
+        theme_cycle,
+        theme_cycle_idx: 0,
     };
 
     // Run the main loop
