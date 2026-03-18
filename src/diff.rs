@@ -88,7 +88,8 @@ fn get_diff_output_with_args(args: &[&str]) -> Result<String, Box<dyn Error>> {
         .into());
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(String::from_utf8(output.stdout)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 }
 
 fn extract_left_label(args: &str) -> String {
@@ -116,7 +117,15 @@ fn parse_diff_output(diff_output: &str) -> Result<FileChanges, Box<dyn Error>> {
     let mut head_line_number = 1;
 
     for line in diff_output.lines() {
-        let trimmed_line = ANSI_ESCAPE_RE.replace_all(line.trim_end(), "");
+        let trimmed = line.trim_end();
+
+        // Skip the "no newline at end of file" marker — it is not
+        // content and should not be rendered or counted.
+        if trimmed.starts_with("\\ ") {
+            continue;
+        }
+
+        let trimmed_line = ANSI_ESCAPE_RE.replace_all(trimmed, "");
 
         // Handle file header
         if let Some(caps) = DIFF_FILE_RE.captures(trimmed_line.as_ref()) {
@@ -312,6 +321,10 @@ pub fn apply_operations(lines: &[String], operations: &[ChangeOp]) -> Vec<String
         b_order.cmp(&a_order)
     });
 
+    // Sort so we can binary-search instead of scanning the whole
+    // list for every insert (avoids O(n²) on large diffs).
+    deleted_positions.sort_unstable();
+
     for op in &insert_ops {
         if let ChangeOp::Insert {
             base_pos, content, ..
@@ -321,7 +334,7 @@ pub fn apply_operations(lines: &[String], operations: &[ChangeOp]) -> Vec<String
                 continue;
             }
             // Adjust for lines that were deleted at positions before this one
-            let deletes_before = deleted_positions.iter().filter(|&&d| d < *base_pos).count();
+            let deletes_before = deleted_positions.partition_point(|&d| d < *base_pos);
             let adjusted = base_pos.saturating_sub(deletes_before);
             let idx = adjusted.saturating_sub(1).min(lines.len());
             lines.insert(idx, content.clone());
@@ -509,6 +522,33 @@ index abc..def 100644
                 .iter()
                 .any(|(_, l)| l.contains("similarity") || l.contains("rename")),
             "metadata leaked into head lines: {:?}",
+            head
+        );
+    }
+
+    #[test]
+    fn parse_skips_no_newline_marker() {
+        let diff = "\
+diff --git a/file.rs b/file.rs
+index abc..def 100644
+--- a/file.rs
++++ b/file.rs
+@@ -1,2 +1,2 @@
+-old line
+\\ No newline at end of file
++new line
+\\ No newline at end of file
+";
+        let changes = parse_diff_output(diff).unwrap();
+        let (base, head) = changes.get("file.rs").expect("file should be present");
+        assert!(
+            !base.iter().any(|(_, l)| l.contains("No newline")),
+            "no-newline marker leaked into base lines: {:?}",
+            base
+        );
+        assert!(
+            !head.iter().any(|(_, l)| l.contains("No newline")),
+            "no-newline marker leaked into head lines: {:?}",
             head
         );
     }

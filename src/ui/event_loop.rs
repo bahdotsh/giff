@@ -8,6 +8,68 @@ use super::render::ui;
 use super::theme::Theme;
 use super::types::*;
 
+fn commit_rebase_changes(app: &mut App) {
+    let mut any_applied = false;
+    let mut errors = Vec::new();
+
+    for (file, changes) in &app.rebase_changes {
+        let mut operations = Vec::new();
+
+        for change in changes {
+            if change.state != ChangeState::Accepted {
+                continue;
+            }
+
+            if change.is_base {
+                if let Some(paired_content) = &change.paired_content {
+                    // Replace: swap old content with incoming content
+                    let clean = paired_content
+                        .strip_prefix('+')
+                        .unwrap_or(paired_content);
+                    operations.push(diff::ChangeOp::Replace(
+                        change.line_num,
+                        clean.to_string(),
+                    ));
+                } else {
+                    // Delete: remove the line entirely
+                    operations.push(diff::ChangeOp::Delete(change.line_num));
+                }
+            } else {
+                // Insert: use computed base position
+                let clean = change
+                    .content
+                    .strip_prefix('+')
+                    .unwrap_or(&change.content);
+                let base_pos = change.base_insert_pos.unwrap_or(change.line_num);
+                operations.push(diff::ChangeOp::Insert {
+                    base_pos,
+                    order: change.line_num,
+                    content: clean.to_string(),
+                });
+            }
+        }
+
+        if !operations.is_empty() {
+            any_applied = true;
+            if let Err(e) = diff::apply_changes(file, &operations) {
+                errors.push(format!("{}: {}", file, e));
+            }
+        }
+    }
+
+    // Surface feedback through the UI
+    if !errors.is_empty() {
+        app.status_message = Some(format!("Error: {}", errors.join("; ")));
+    } else if any_applied {
+        app.status_message = Some("Changes applied successfully!".to_string());
+    } else {
+        app.status_message = Some("No accepted changes to apply.".to_string());
+    }
+
+    // Return to diff mode
+    app.app_mode = AppMode::Diff;
+}
+
 fn set_change_state(app: &mut App, state: ChangeState) {
     if let Some(file) = app.file_names.get(app.current_file_idx) {
         if let Some(changes) = app.rebase_changes.get_mut(file) {
@@ -141,71 +203,7 @@ where
                         }
                         KeyCode::Char('c') => {
                             if let AppMode::Rebase = app.app_mode {
-                                // Commit rebase changes
-                                let mut any_applied = false;
-                                let mut errors = Vec::new();
-
-                                for (file, changes) in &app.rebase_changes {
-                                    let mut operations = Vec::new();
-
-                                    for change in changes {
-                                        if change.state != ChangeState::Accepted {
-                                            continue;
-                                        }
-
-                                        if change.is_base {
-                                            if let Some(paired_content) = &change.paired_content {
-                                                // Replace: swap old content with incoming content
-                                                let clean = paired_content
-                                                    .strip_prefix('+')
-                                                    .unwrap_or(paired_content);
-                                                operations.push(diff::ChangeOp::Replace(
-                                                    change.line_num,
-                                                    clean.to_string(),
-                                                ));
-                                            } else {
-                                                // Delete: remove the line entirely
-                                                operations
-                                                    .push(diff::ChangeOp::Delete(change.line_num));
-                                            }
-                                        } else {
-                                            // Insert: use computed base position
-                                            let clean = change
-                                                .content
-                                                .strip_prefix('+')
-                                                .unwrap_or(&change.content);
-                                            let base_pos =
-                                                change.base_insert_pos.unwrap_or(change.line_num);
-                                            operations.push(diff::ChangeOp::Insert {
-                                                base_pos,
-                                                order: change.line_num,
-                                                content: clean.to_string(),
-                                            });
-                                        }
-                                    }
-
-                                    if !operations.is_empty() {
-                                        any_applied = true;
-                                        if let Err(e) = diff::apply_changes(file, &operations) {
-                                            errors.push(format!("{}: {}", file, e));
-                                        }
-                                    }
-                                }
-
-                                // Surface feedback through the UI
-                                if !errors.is_empty() {
-                                    app.status_message =
-                                        Some(format!("Error: {}", errors.join("; ")));
-                                } else if any_applied {
-                                    app.status_message =
-                                        Some("Changes applied successfully!".to_string());
-                                } else {
-                                    app.status_message =
-                                        Some("No accepted changes to apply.".to_string());
-                                }
-
-                                // Return to diff mode
-                                app.app_mode = AppMode::Diff;
+                                commit_rebase_changes(&mut app);
                             }
                         }
                         KeyCode::Char('j') | KeyCode::Down => match app.app_mode {

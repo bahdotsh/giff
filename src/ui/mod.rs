@@ -8,7 +8,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-use crate::diff::{self, FileChanges};
+use crate::diff::FileChanges;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -33,6 +33,7 @@ pub fn run_app(
     left_label: &str,
     right_label: &str,
     theme: theme::Theme,
+    rebase_notification: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
     // Install a panic hook that restores the terminal before printing the
     // panic message. Without this, a panic leaves the terminal in raw mode
@@ -59,9 +60,6 @@ pub fn run_app(
         scroll_positions.insert(name.clone(), 0usize);
     }
 
-    // Check if rebase is needed
-    let rebase_notification = diff::check_rebase_needed()?;
-
     let app = App {
         file_changes: &file_changes,
         left_label,
@@ -74,8 +72,8 @@ pub fn run_app(
         app_mode: AppMode::Diff,
         rebase_changes: HashMap::new(),
         current_change_idx: 0,
-        rebase_notification: rebase_notification.clone(),
         show_rebase_modal: rebase_notification.is_some(),
+        rebase_notification,
         status_message: None,
         show_help_modal: false,
         theme,

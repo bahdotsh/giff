@@ -68,12 +68,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    // Check if rebase is needed (once, reuse in UI)
+    let rebase_notification = diff::check_rebase_needed()?;
+
     // Load config and resolve theme
     let cfg = config::load_config();
     let theme = config::resolve_theme(&cfg, args.theme.as_deref());
 
     // Start the interactive UI
-    ui::run_app(file_changes, &left_label, &right_label, theme)?;
+    ui::run_app(file_changes, &left_label, &right_label, theme, rebase_notification)?;
 
     Ok(())
 }
