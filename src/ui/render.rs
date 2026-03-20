@@ -173,6 +173,9 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
+    // Available width inside the block: area width minus borders (2) minus highlight symbol width (2)
+    let inner_width = area.width.saturating_sub(4) as usize;
+
     let items: Vec<ListItem> = app
         .file_names
         .iter()
@@ -188,7 +191,34 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(t.fg_normal)
             };
 
-            let mut spans = vec![Span::styled(file.clone(), name_style)];
+            // Calculate how much space the stats suffix needs (no allocations)
+            let stats_width = if adds > 0 || dels > 0 {
+                let mut w = 1; // leading space
+                if adds > 0 {
+                    w += 1 + digit_count(adds); // "+" + digits
+                }
+                if adds > 0 && dels > 0 {
+                    w += 1; // space between
+                }
+                if dels > 0 {
+                    w += 1 + digit_count(dels); // "-" + digits
+                }
+                w
+            } else {
+                0
+            };
+
+            let max_name_width = inner_width.saturating_sub(stats_width);
+            let char_count = file.chars().count();
+            let display_name = if char_count > max_name_width && max_name_width > 1 {
+                let keep = max_name_width.saturating_sub(1);
+                let truncated: String = file.chars().take(keep).collect();
+                format!("{}\u{2026}", truncated)
+            } else {
+                file.clone()
+            };
+
+            let mut spans = vec![Span::styled(display_name, name_style)];
             if adds > 0 || dels > 0 {
                 spans.push(Span::styled(" ", Style::default()));
                 if adds > 0 {
@@ -821,6 +851,19 @@ fn clamp_scroll(app: &mut App, content_area_height: u16) {
     if scroll > max_scroll {
         app.scroll_positions.insert(file.clone(), max_scroll);
     }
+}
+
+fn digit_count(n: usize) -> usize {
+    if n == 0 {
+        return 1;
+    }
+    let mut count = 0;
+    let mut v = n;
+    while v > 0 {
+        count += 1;
+        v /= 10;
+    }
+    count
 }
 
 fn count_file_changes(app: &App, file: &str) -> (usize, usize) {
