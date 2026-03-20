@@ -9,6 +9,8 @@ use ratatui::{
     Frame,
 };
 
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
 use crate::diff::LineChange;
 
 use super::rebase::render_rebase_ui;
@@ -173,8 +175,9 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Available width inside the block: area width minus borders (2) minus highlight symbol width (2)
-    let inner_width = area.width.saturating_sub(4) as usize;
+    // Borders (2) + highlight symbol "▌ " (2)
+    const FILE_LIST_CHROME_WIDTH: u16 = 4;
+    let inner_width = area.width.saturating_sub(FILE_LIST_CHROME_WIDTH) as usize;
 
     let items: Vec<ListItem> = app
         .file_names
@@ -191,57 +194,12 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(t.fg_normal)
             };
 
-            // Calculate how much space the stats suffix needs (no allocations)
-            let stats_width = if adds > 0 || dels > 0 {
-                let mut w = 1; // leading space
-                if adds > 0 {
-                    w += 1 + digit_count(adds); // "+" + digits
-                }
-                if adds > 0 && dels > 0 {
-                    w += 1; // space between
-                }
-                if dels > 0 {
-                    w += 1 + digit_count(dels); // "-" + digits
-                }
-                w
-            } else {
-                0
-            };
-
+            let (stat_spans, stats_width) = build_file_stats(adds, dels, t);
             let max_name_width = inner_width.saturating_sub(stats_width);
-            let char_count = file.chars().count();
-            let display_name = if char_count > max_name_width {
-                if max_name_width <= 1 {
-                    "\u{2026}".to_string()
-                } else {
-                    // Keep the tail — the filename is more useful than the directory prefix
-                    let skip = char_count - (max_name_width - 1);
-                    let truncated: String = file.chars().skip(skip).collect();
-                    format!("\u{2026}{}", truncated)
-                }
-            } else {
-                file.clone()
-            };
+            let display_name = truncate_path(file, max_name_width);
 
             let mut spans = vec![Span::styled(display_name, name_style)];
-            if adds > 0 || dels > 0 {
-                spans.push(Span::styled(" ", Style::default()));
-                if adds > 0 {
-                    spans.push(Span::styled(
-                        format!("+{}", adds),
-                        Style::default().fg(t.fg_added),
-                    ));
-                }
-                if adds > 0 && dels > 0 {
-                    spans.push(Span::styled(" ", Style::default()));
-                }
-                if dels > 0 {
-                    spans.push(Span::styled(
-                        format!("-{}", dels),
-                        Style::default().fg(t.fg_removed),
-                    ));
-                }
-            }
+            spans.extend(stat_spans);
 
             ListItem::new(Line::from(spans))
         })
@@ -858,17 +816,58 @@ fn clamp_scroll(app: &mut App, content_area_height: u16) {
     }
 }
 
-fn digit_count(n: usize) -> usize {
-    if n == 0 {
-        return 1;
+/// Build the styled stats spans (e.g. " +3 -1") and return their total display width.
+fn build_file_stats<'a>(adds: usize, dels: usize, theme: &Theme) -> (Vec<Span<'a>>, usize) {
+    if adds == 0 && dels == 0 {
+        return (vec![], 0);
     }
-    let mut count = 0;
-    let mut v = n;
-    while v > 0 {
-        count += 1;
-        v /= 10;
+
+    let mut spans = Vec::new();
+    let mut width = 1; // leading space
+    spans.push(Span::styled(" ", Style::default()));
+
+    if adds > 0 {
+        let s = format!("+{}", adds);
+        width += s.len();
+        spans.push(Span::styled(s, Style::default().fg(theme.fg_added)));
     }
-    count
+    if adds > 0 && dels > 0 {
+        width += 1;
+        spans.push(Span::styled(" ", Style::default()));
+    }
+    if dels > 0 {
+        let s = format!("-{}", dels);
+        width += s.len();
+        spans.push(Span::styled(s, Style::default().fg(theme.fg_removed)));
+    }
+
+    (spans, width)
+}
+
+/// Truncate a path from the left so it fits within `max_width` display columns,
+/// preserving the filename (tail). Uses unicode display widths so East Asian
+/// full-width characters are measured correctly.
+fn truncate_path(path: &str, max_width: usize) -> String {
+    let display_width = UnicodeWidthStr::width(path);
+    if display_width <= max_width {
+        return path.to_string();
+    }
+    if max_width <= 1 {
+        return "\u{2026}".to_string();
+    }
+    // Reserve 1 column for the "…" prefix, keep as much of the tail as possible
+    let target = max_width - 1;
+    let mut width = 0;
+    let mut start_byte = path.len();
+    for (idx, ch) in path.char_indices().rev() {
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + ch_width > target {
+            break;
+        }
+        width += ch_width;
+        start_byte = idx;
+    }
+    format!("\u{2026}{}", &path[start_byte..])
 }
 
 #[cfg(test)]
@@ -876,16 +875,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_digit_count() {
-        assert_eq!(digit_count(0), 1);
-        assert_eq!(digit_count(1), 1);
-        assert_eq!(digit_count(9), 1);
-        assert_eq!(digit_count(10), 2);
-        assert_eq!(digit_count(99), 2);
-        assert_eq!(digit_count(100), 3);
-        assert_eq!(digit_count(999), 3);
-        assert_eq!(digit_count(1000), 4);
-        assert_eq!(digit_count(usize::MAX), usize::MAX.to_string().len());
+    fn test_truncate_path_no_truncation_needed() {
+        assert_eq!(truncate_path("src/main.rs", 20), "src/main.rs");
+    }
+
+    #[test]
+    fn test_truncate_path_exact_fit() {
+        assert_eq!(truncate_path("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn test_truncate_path_truncates_from_left() {
+        // 10 chars, max 6 → "…" + last 5 chars
+        assert_eq!(truncate_path("abcdefghij", 6), "\u{2026}fghij");
+    }
+
+    #[test]
+    fn test_truncate_path_very_narrow() {
+        assert_eq!(truncate_path("abcdefghij", 1), "\u{2026}");
+        assert_eq!(truncate_path("abcdefghij", 0), "\u{2026}");
+    }
+
+    #[test]
+    fn test_truncate_path_width_2() {
+        // max_width=2 → "…" + 1 char
+        assert_eq!(truncate_path("abcdef", 2), "\u{2026}f");
+    }
+
+    #[test]
+    fn test_truncate_path_cjk_characters() {
+        // Each CJK char is 2 display columns wide
+        // "日本語" = 6 columns, max 5 → "…" + "本語" (4 cols) = 5
+        assert_eq!(truncate_path("日本語", 5), "\u{2026}本語");
+    }
+
+    #[test]
+    fn test_truncate_path_mixed_ascii_cjk() {
+        // "src/日本語.rs" — test that mixed content truncates correctly
+        let path = "src/日本語.rs";
+        let truncated = truncate_path(path, 8);
+        // Should end with the tail that fits in 7 cols (8 - 1 for "…")
+        assert!(truncated.starts_with('\u{2026}'));
+        assert!(UnicodeWidthStr::width(truncated.as_str()) <= 8);
     }
 }
 
