@@ -828,7 +828,7 @@ fn build_file_stats<'a>(adds: usize, dels: usize, theme: &Theme) -> (Vec<Span<'a
 
     if adds > 0 {
         let s = format!("+{}", adds);
-        width += s.len();
+        width += UnicodeWidthStr::width(s.as_str());
         spans.push(Span::styled(s, Style::default().fg(theme.fg_added)));
     }
     if adds > 0 && dels > 0 {
@@ -837,7 +837,7 @@ fn build_file_stats<'a>(adds: usize, dels: usize, theme: &Theme) -> (Vec<Span<'a
     }
     if dels > 0 {
         let s = format!("-{}", dels);
-        width += s.len();
+        width += UnicodeWidthStr::width(s.as_str());
         spans.push(Span::styled(s, Style::default().fg(theme.fg_removed)));
     }
 
@@ -917,6 +917,59 @@ mod tests {
         // Should end with the tail that fits in 7 cols (8 - 1 for "…")
         assert!(truncated.starts_with('\u{2026}'));
         assert!(UnicodeWidthStr::width(truncated.as_str()) <= 8);
+    }
+
+    // ── build_file_stats ────────────────────────────────────────────────
+
+    fn stats_content_width(spans: &[Span]) -> usize {
+        spans
+            .iter()
+            .map(|s| UnicodeWidthStr::width(s.content.as_ref()))
+            .sum()
+    }
+
+    #[test]
+    fn test_build_file_stats_no_changes() {
+        let t = Theme::dark();
+        let (spans, width) = build_file_stats(0, 0, &t);
+        assert!(spans.is_empty());
+        assert_eq!(width, 0);
+    }
+
+    #[test]
+    fn test_build_file_stats_adds_only() {
+        let t = Theme::dark();
+        let (spans, width) = build_file_stats(42, 0, &t);
+        // " +42" → 1 + 3 = 4
+        assert_eq!(width, 4);
+        assert_eq!(stats_content_width(&spans), width);
+    }
+
+    #[test]
+    fn test_build_file_stats_dels_only() {
+        let t = Theme::dark();
+        let (spans, width) = build_file_stats(0, 7, &t);
+        // " -7" → 1 + 2 = 3
+        assert_eq!(width, 3);
+        assert_eq!(stats_content_width(&spans), width);
+    }
+
+    #[test]
+    fn test_build_file_stats_adds_and_dels() {
+        let t = Theme::dark();
+        let (spans, width) = build_file_stats(3, 1, &t);
+        // " +3 -1" → 1 + 2 + 1 + 2 = 6
+        assert_eq!(width, 6);
+        assert_eq!(stats_content_width(&spans), width);
+    }
+
+    #[test]
+    fn test_build_file_stats_large_numbers() {
+        let t = Theme::dark();
+        let (spans, width) = build_file_stats(1000, 99999, &t);
+        // " +1000 -99999" → 1 + 5 + 1 + 6 = 13
+        assert_eq!(width, 13);
+        assert_eq!(stats_content_width(&spans), width);
     }
 }
 
