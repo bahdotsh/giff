@@ -210,10 +210,15 @@ pub fn render_file_list(f: &mut Frame, app: &App, area: Rect) {
 
             let max_name_width = inner_width.saturating_sub(stats_width);
             let char_count = file.chars().count();
-            let display_name = if char_count > max_name_width && max_name_width > 1 {
-                let keep = max_name_width.saturating_sub(1);
-                let truncated: String = file.chars().take(keep).collect();
-                format!("{}\u{2026}", truncated)
+            let display_name = if char_count > max_name_width {
+                if max_name_width <= 1 {
+                    "\u{2026}".to_string()
+                } else {
+                    // Keep the tail — the filename is more useful than the directory prefix
+                    let skip = char_count - (max_name_width - 1);
+                    let truncated: String = file.chars().skip(skip).collect();
+                    format!("\u{2026}{}", truncated)
+                }
             } else {
                 file.clone()
             };
@@ -864,6 +869,24 @@ fn digit_count(n: usize) -> usize {
         v /= 10;
     }
     count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_digit_count() {
+        assert_eq!(digit_count(0), 1);
+        assert_eq!(digit_count(1), 1);
+        assert_eq!(digit_count(9), 1);
+        assert_eq!(digit_count(10), 2);
+        assert_eq!(digit_count(99), 2);
+        assert_eq!(digit_count(100), 3);
+        assert_eq!(digit_count(999), 3);
+        assert_eq!(digit_count(1000), 4);
+        assert_eq!(digit_count(usize::MAX), usize::MAX.to_string().len());
+    }
 }
 
 fn count_file_changes(app: &App, file: &str) -> (usize, usize) {
