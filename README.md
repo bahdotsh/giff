@@ -102,9 +102,9 @@ Scroll wheel works in both the file list and diff panes.
 `~/.config/giff/config.toml`
 
 ```toml
-theme = "dark"
+theme = "your_custom_theme_name"
 
-[themes.custom]
+[themes.your_custom_theme_name]
 base = "dark"
 accent = "#89b4fa"
 fg_added = "#a6e3a1"
