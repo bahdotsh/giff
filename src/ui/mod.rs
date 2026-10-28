@@ -83,6 +83,7 @@ pub fn run_app(
         current_file_idx: 0,
         file_names,
         scroll_positions,
+        h_scroll_positions: HashMap::new(),
         focused_pane: Pane::FileList,
         view_mode: ViewMode::SideBySide,
         app_mode: AppMode::Diff,

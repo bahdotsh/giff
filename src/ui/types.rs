@@ -34,6 +34,8 @@ pub struct App<'a> {
     pub current_file_idx: usize,
     pub file_names: Vec<String>,
     pub scroll_positions: HashMap<String, usize>,
+    /// Horizontal scroll offset (in display columns) of the diff content per file
+    pub h_scroll_positions: HashMap<String, usize>,
     pub focused_pane: Pane,
     pub view_mode: ViewMode,
     pub app_mode: AppMode,

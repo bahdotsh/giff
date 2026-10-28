@@ -7,6 +7,9 @@ use super::rebase::prepare_rebase_changes;
 use super::render::ui;
 use super::types::*;
 
+/// Columns moved per horizontal scroll step in the diff view.
+const H_SCROLL_STEP: usize = 4;
+
 fn commit_rebase_changes(app: &mut App) {
     let mut any_applied = false;
     let mut errors = Vec::new();
@@ -345,13 +348,41 @@ where
                             }
                         }
                         KeyCode::Char('h') | KeyCode::Left => {
+                            // Scroll the diff left; once at the left edge, focus the file list
                             if let AppMode::Diff = app.app_mode {
-                                app.focused_pane = Pane::FileList;
+                                let h_scroll = app
+                                    .file_names
+                                    .get(app.current_file_idx)
+                                    .and_then(|file| app.h_scroll_positions.get(file))
+                                    .copied()
+                                    .unwrap_or(0);
+                                match app.focused_pane {
+                                    Pane::DiffContent if h_scroll > 0 => {
+                                        let file = app.file_names[app.current_file_idx].clone();
+                                        app.h_scroll_positions
+                                            .insert(file, h_scroll.saturating_sub(H_SCROLL_STEP));
+                                    }
+                                    _ => app.focused_pane = Pane::FileList,
+                                }
                             }
                         }
                         KeyCode::Char('l') | KeyCode::Right => {
+                            // Focus the diff; once focused, scroll it right
                             if let AppMode::Diff = app.app_mode {
-                                app.focused_pane = Pane::DiffContent;
+                                match app.focused_pane {
+                                    Pane::FileList => app.focused_pane = Pane::DiffContent,
+                                    Pane::DiffContent => {
+                                        if let Some(file) = app.file_names.get(app.current_file_idx)
+                                        {
+                                            let h_scroll =
+                                                *app.h_scroll_positions.get(file).unwrap_or(&0);
+                                            app.h_scroll_positions.insert(
+                                                file.clone(),
+                                                h_scroll.saturating_add(H_SCROLL_STEP),
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                         KeyCode::Char('t') => {
@@ -445,6 +476,27 @@ where
                                 }
                             }
                         }
+                        MouseEventKind::ScrollLeft | MouseEventKind::ScrollRight => {
+                            if mouse.row == 0 || mouse.row >= size.height.saturating_sub(1) {
+                                continue;
+                            }
+                            if let AppMode::Diff = app.app_mode {
+                                let file_list_width = size.width / 5;
+                                if mouse.column < file_list_width {
+                                    continue;
+                                }
+                                if let Some(file) = app.file_names.get(app.current_file_idx) {
+                                    let h_scroll = *app.h_scroll_positions.get(file).unwrap_or(&0);
+                                    let new_h_scroll =
+                                        if matches!(mouse.kind, MouseEventKind::ScrollRight) {
+                                            h_scroll.saturating_add(H_SCROLL_STEP)
+                                        } else {
+                                            h_scroll.saturating_sub(H_SCROLL_STEP)
+                                        };
+                                    app.h_scroll_positions.insert(file.clone(), new_h_scroll);
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -490,6 +542,7 @@ mod tests {
             current_file_idx: 0,
             file_names,
             scroll_positions: HashMap::new(),
+            h_scroll_positions: HashMap::new(),
             focused_pane: Pane::FileList,
             view_mode: ViewMode::SideBySide,
             app_mode: AppMode::Rebase,

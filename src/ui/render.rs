@@ -53,6 +53,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     ])
                     .split(main_chunks[1]);
 
+                clamp_h_scroll(app, content_chunks[1].width.min(content_chunks[2].width));
                 render_file_list(f, app, content_chunks[0]);
                 if !app.file_names.is_empty() {
                     render_side_by_side(f, app, content_chunks[1], content_chunks[2]);
@@ -64,6 +65,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
                     .split(main_chunks[1]);
 
+                clamp_h_scroll(app, content_chunks[1].width);
                 render_file_list(f, app, content_chunks[0]);
                 if !app.file_names.is_empty() {
                     render_unified_diff(f, app, content_chunks[1]);
@@ -224,6 +226,7 @@ fn render_diff_pane(
     lines: &[(usize, String)],
     filename: &str,
     scroll: usize,
+    h_scroll: usize,
     is_focused: bool,
     area: Rect,
     theme: &Theme,
@@ -241,11 +244,19 @@ fn render_diff_pane(
         Style::default().fg(theme.fg_dim)
     };
 
-    let highlighted = highlight_line_changes(lines, filename, theme);
+    let mut highlighted = highlight_line_changes(lines, filename, theme);
+    for line in &mut highlighted {
+        scroll_line_horizontally(line, h_scroll);
+    }
     let total_lines = highlighted.len();
     let content = Text::from(highlighted);
     let visible_height = area.height.saturating_sub(2) as usize;
 
+    let h_indicator = if h_scroll > 0 {
+        format!(" \u{2190}{}", h_scroll)
+    } else {
+        String::new()
+    };
     let title_text = if total_lines > visible_height {
         let max_scroll = total_lines.saturating_sub(visible_height);
         let pos = scroll.min(max_scroll);
@@ -254,9 +265,9 @@ fn render_diff_pane(
         } else {
             0
         };
-        format!(" {} ({}%) ", title, pct)
+        format!(" {} ({}%){} ", title, pct, h_indicator)
     } else {
-        format!(" {} ", title)
+        format!(" {}{} ", title, h_indicator)
     };
 
     let block = Block::default()
@@ -288,6 +299,61 @@ fn render_diff_pane(
             &mut scrollbar_state,
         );
     }
+}
+
+/// Number of leading spans in a highlighted diff line that form the gutter
+/// (line number + change marker). They stay fixed while the code scrolls.
+const GUTTER_SPANS: usize = 2;
+/// Display width of the gutter: "{:4} " line number + 2-column marker.
+const GUTTER_WIDTH: u16 = 7;
+
+/// Drop the first `offset` display columns of a line's code, keeping the
+/// gutter in place. A wide character cut in half is replaced by a space.
+pub(super) fn scroll_line_horizontally(line: &mut Line<'static>, offset: usize) {
+    if offset == 0 || line.spans.len() <= GUTTER_SPANS {
+        return;
+    }
+    let code = line.spans.split_off(GUTTER_SPANS);
+    let mut to_skip = offset;
+    for span in code {
+        if to_skip == 0 {
+            line.spans.push(span);
+            continue;
+        }
+        let width = UnicodeWidthStr::width(span.content.as_ref());
+        if width <= to_skip {
+            to_skip -= width;
+            continue;
+        }
+        let mut skipped = 0;
+        let mut start = span.content.len();
+        for (idx, ch) in span.content.char_indices() {
+            if skipped >= to_skip {
+                start = idx;
+                break;
+            }
+            skipped += UnicodeWidthChar::width(ch).unwrap_or(0);
+        }
+        let pad = " ".repeat(skipped - to_skip);
+        line.spans.push(Span::styled(
+            format!("{}{}", pad, &span.content[start..]),
+            span.style,
+        ));
+        to_skip = 0;
+    }
+}
+
+/// Display width of the longest code line (without the diff prefix) on either side.
+pub(super) fn max_code_width(base_lines: &[LineChange], head_lines: &[LineChange]) -> usize {
+    base_lines
+        .iter()
+        .chain(head_lines.iter())
+        .map(|(_, l)| {
+            let code = l.strip_prefix(['-', '+', ' ']).unwrap_or(l);
+            UnicodeWidthStr::width(code)
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// Produce aligned line vectors for side-by-side display.
@@ -424,6 +490,7 @@ fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rec
         None => return,
     };
     let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
+    let h_scroll = *app.h_scroll_positions.get(current_file).unwrap_or(&0);
     let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
     let (aligned_base, aligned_head) = align_lines(base_lines, head_lines);
@@ -434,6 +501,7 @@ fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rec
         &aligned_base,
         current_file,
         scroll,
+        h_scroll,
         is_focused,
         base_area,
         &app.theme,
@@ -444,6 +512,7 @@ fn render_side_by_side(f: &mut Frame, app: &App, base_area: Rect, head_area: Rec
         &aligned_head,
         current_file,
         scroll,
+        h_scroll,
         is_focused,
         head_area,
         &app.theme,
@@ -502,6 +571,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
         None => return,
     };
     let scroll = *app.scroll_positions.get(current_file).unwrap_or(&0);
+    let h_scroll = *app.h_scroll_positions.get(current_file).unwrap_or(&0);
     let is_focused = matches!(app.focused_pane, Pane::DiffContent);
 
     let unified_lines = build_unified_lines(base_lines, head_lines);
@@ -513,6 +583,7 @@ fn render_unified_diff(f: &mut Frame, app: &App, area: Rect) {
         &unified_lines,
         current_file,
         scroll,
+        h_scroll,
         is_focused,
         area,
         &app.theme,
@@ -684,8 +755,8 @@ fn render_help_modal(f: &mut Frame, app: &App, area: Rect) {
             section("Diff View"),
             empty(),
             row("Tab", "Toggle focus (files / diff)"),
-            row("h / \u{2190}", "Focus file list"),
-            row("l / \u{2192}", "Focus diff content"),
+            row("h / \u{2190}", "Scroll left / focus file list"),
+            row("l / \u{2192}", "Focus diff / scroll right"),
             row("u", "Toggle unified / side-by-side"),
             row("t", "Toggle dark / light theme"),
             row("r", "Enter rebase mode"),
@@ -752,7 +823,7 @@ fn render_help(f: &mut Frame, app: &App, area: Rect) {
             ("q", "Quit"),
             ("j/k", "Navigate"),
             ("Tab", "Focus"),
-            ("h/l", "Panes"),
+            ("h/l", "Scroll"),
             ("u", "View"),
             ("t", "Theme"),
             ("PgUp/Dn", "Page"),
@@ -813,6 +884,25 @@ fn clamp_scroll(app: &mut App, content_area_height: u16) {
     let scroll = app.scroll_positions.get(file).copied().unwrap_or(0);
     if scroll > max_scroll {
         app.scroll_positions.insert(file.clone(), max_scroll);
+    }
+}
+
+fn clamp_h_scroll(app: &mut App, diff_pane_width: u16) {
+    let file = match app.file_names.get(app.current_file_idx) {
+        Some(f) => f,
+        None => return,
+    };
+    let (base, head) = match app.file_changes.get(file) {
+        Some(c) => c,
+        None => return,
+    };
+
+    // Borders (2) + gutter
+    let code_width = diff_pane_width.saturating_sub(2 + GUTTER_WIDTH) as usize;
+    let max_h_scroll = max_code_width(base, head).saturating_sub(code_width);
+    let h_scroll = app.h_scroll_positions.get(file).copied().unwrap_or(0);
+    if h_scroll > max_h_scroll {
+        app.h_scroll_positions.insert(file.clone(), max_h_scroll);
     }
 }
 
@@ -970,6 +1060,87 @@ mod tests {
         // " +1000 -99999" → 1 + 5 + 1 + 6 = 13
         assert_eq!(width, 13);
         assert_eq!(stats_content_width(&spans), width);
+    }
+
+    // ── horizontal scroll ───────────────────────────────────────────────
+
+    fn diff_line(code: &[&'static str]) -> Line<'static> {
+        let mut spans = vec![Span::raw("   1 "), Span::raw("+ ")];
+        spans.extend(code.iter().map(|s| Span::raw(*s)));
+        Line::from(spans)
+    }
+
+    fn line_text(line: &Line) -> String {
+        line.spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn test_h_scroll_zero_offset_unchanged() {
+        let mut line = diff_line(&["let x = 1;"]);
+        scroll_line_horizontally(&mut line, 0);
+        assert_eq!(line_text(&line), "   1 + let x = 1;");
+    }
+
+    #[test]
+    fn test_h_scroll_keeps_gutter() {
+        let mut line = diff_line(&["let x = 1;"]);
+        scroll_line_horizontally(&mut line, 4);
+        assert_eq!(line_text(&line), "   1 + x = 1;");
+    }
+
+    #[test]
+    fn test_h_scroll_across_span_boundary() {
+        let mut line = diff_line(&["let", " x", " = 1;"]);
+        scroll_line_horizontally(&mut line, 4);
+        assert_eq!(line_text(&line), "   1 + x = 1;");
+        assert_eq!(line.spans.len(), 4);
+    }
+
+    #[test]
+    fn test_h_scroll_preserves_span_style() {
+        let style = Style::default().fg(Color::Red);
+        let mut line = Line::from(vec![
+            Span::raw("   1 "),
+            Span::raw("+ "),
+            Span::styled("abcdef", style),
+        ]);
+        scroll_line_horizontally(&mut line, 2);
+        assert_eq!(line.spans[2].content, "cdef");
+        assert_eq!(line.spans[2].style, style);
+    }
+
+    #[test]
+    fn test_h_scroll_past_end_leaves_only_gutter() {
+        let mut line = diff_line(&["abc"]);
+        scroll_line_horizontally(&mut line, 10);
+        assert_eq!(line_text(&line), "   1 + ");
+    }
+
+    #[test]
+    fn test_h_scroll_splits_wide_char_with_space() {
+        // "日本" = 4 columns; skipping 1 cuts "日" in half
+        let mut line = diff_line(&["日本"]);
+        scroll_line_horizontally(&mut line, 1);
+        assert_eq!(line_text(&line), "   1 +  本");
+    }
+
+    #[test]
+    fn test_h_scroll_gap_line_unchanged() {
+        let mut line = Line::from(Span::raw(""));
+        scroll_line_horizontally(&mut line, 5);
+        assert_eq!(line_text(&line), "");
+    }
+
+    #[test]
+    fn test_max_code_width_ignores_prefix() {
+        let base = vec![(1, "-abc".to_string()), (2, " abcdef".to_string())];
+        let head = vec![(1, "+abcd".to_string()), (0, String::new())];
+        assert_eq!(max_code_width(&base, &head), 6);
+    }
+
+    #[test]
+    fn test_max_code_width_empty() {
+        assert_eq!(max_code_width(&[], &[]), 0);
     }
 }
 

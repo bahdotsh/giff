@@ -75,7 +75,7 @@ giff --auto-rebase          # auto-rebase if behind upstream
 | `PageDown` / `PageUp` | Page down / up |
 | `Home` / `End` | Jump to first / last item |
 | `Tab` | Toggle focus between file list and diff |
-| `h` / `l` | Focus file list / diff content |
+| `h` / `l` | Scroll diff left / right (`h` at the left edge focuses the file list, `l` focuses the diff) |
 | `u` | Toggle unified / side-by-side view |
 | `t` | Toggle dark / light theme |
 | `r` | Enter rebase mode |
@@ -95,7 +95,7 @@ giff --auto-rebase          # auto-rebase if behind upstream
 
 ### Mouse
 
-Scroll wheel works in both the file list and diff panes.
+Scroll wheel works in both the file list and diff panes. Horizontal scrolling (touchpad or tilt wheel) scrolls the diff sideways.
 
 ## Configuration
 
